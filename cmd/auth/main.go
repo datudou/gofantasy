@@ -8,12 +8,10 @@ import (
 )
 
 func main() {
-	redirectURL := "https://www.eoslaomao.com"
+	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
 	clientID := os.Getenv("YAHOO_CLIENT_ID")
-	//client secret is no need if app is registered as public client
-	clientSecret := os.Getenv("YAHOO_CLIENT_SECRET")
-	yo2 := gofantasy.NewYahooOAuth2(clientID, clientSecret, redirectURL)
-	authCodeUrl, err := yo2.GetAuthCodeUrl()
+	yc := gofantasy.NewClient().Yahoo().WithOAuth2(clientID, "", redirectURL)
+	authCodeUrl, err := yc.GetAuthCodeUrl()
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -27,7 +25,7 @@ func main() {
 		fmt.Println("An error occurred while reading input. Please try again", err)
 		return
 	}
-	token, err := yo2.GetAccessToken(code)
+	token, err := yc.GetAccessToken(code)
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/yahoo"
 	"io"
-	"net/url"
+	"net/http"
 	"time"
 )
 
@@ -20,9 +20,7 @@ import (
 type FantasyContent struct {
 	XMLName xml.Name `xml:"fantasy_content"`
 	League  League   `xml:"league"`
-	//Team    Team     `xml:"team"`
-	//Users   []User   `xml:"users>user"`
-	Game Game `xml:"game"`
+	Game    Game     `xml:"game"`
 }
 
 type Game struct {
@@ -49,7 +47,9 @@ type League struct {
 	CurrentWeek           int      `xml:"current_week"`
 	StartWeek             int      `xml:"start_week"`
 	EndWeek               int      `xml:"end_week"`
+	GameCode              string   `xml:"game_code"`
 	IsFinished            int      `xml:"is_finished"`
+	Season                int      `xml:"season"`
 	Settings              Settings `xml:"settings"`
 }
 
@@ -101,45 +101,6 @@ type YahooOAuth2 struct {
 	codeVerifier string
 }
 
-func NewYahooOAuth2(clientID, clientSecret, redirectURL string) *YahooOAuth2 {
-	codeVerifier, err := randomBytesInHex(32) // 64 character string here
-	if err != nil {
-		panic(err)
-		return nil
-	}
-	return &YahooOAuth2{
-		config: &oauth2.Config{
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			RedirectURL:  redirectURL,
-			Scopes:       []string{"openid"},
-			Endpoint:     yahoo.Endpoint,
-		},
-		state:        generateState(),
-		codeVerifier: codeVerifier,
-	}
-}
-
-func (yo *YahooOAuth2) GetAuthCodeUrl() (string, error) {
-	sha2 := sha256.New()
-	io.WriteString(sha2, yo.codeVerifier)
-	codeChallenge := base64.RawURLEncoding.EncodeToString(sha2.Sum(nil))
-	o1 := oauth2.SetAuthURLParam("code_challenge_method", "S256")
-	o2 := oauth2.SetAuthURLParam("code_challenge", codeChallenge)
-	authCodeUrl := yo.config.AuthCodeURL(yo.state, o1, o2)
-	return authCodeUrl, nil
-}
-
-func (yo *YahooOAuth2) GetAccessToken(code string) (*oauth2.Token, error) {
-	ctx := context.Background()
-	o := oauth2.SetAuthURLParam("code_verifier", yo.codeVerifier)
-	token, err := yo.config.Exchange(ctx, code, o)
-	if err != nil {
-		return nil, fmt.Errorf("Error authorizing token: %s\n", err)
-	}
-	return token, nil
-}
-
 func generateState() string {
 	b := make([]byte, 128)
 	_, err := rand.Read(b)
@@ -154,18 +115,92 @@ func randomBytesInHex(count int) (string, error) {
 	buf := make([]byte, count)
 	_, err := io.ReadFull(rand.Reader, buf)
 	if err != nil {
-		return "", fmt.Errorf("Could not generate %d random bytes: %v", count, err)
+		return "", fmt.Errorf(" Could not generate %d random bytes: %v", count, err)
 	}
 
 	return hex.EncodeToString(buf), nil
 }
 
-func getCodeFromUrl(s string) string {
-	u, err := url.Parse(s)
+type IYahooClient interface {
+	WithAccessToken(accessToken string) IYahooClient
+	WithOAuth2(clientID, clientSecret, redirectURL string) IYahooClient
+	GetGame(ctx context.Context, gameKey string) (*Game, error)
+	GetLeague(ctx context.Context, leagueID string) (*League, error)
+	GetLeagueSettings(ctx context.Context, leagueID string) (*League, error)
+	GetAuthCodeUrl() (string, error)
+	GetAccessToken(code string) (*oauth2.Token, error)
+}
+
+type yahooClient struct {
+	baseUrl     string
+	requestor   *requestor
+	yahooOAuth2 YahooOAuth2
+}
+
+var _ IYahooClient = &yahooClient{}
+
+func (y *yahooClient) GetAccessToken(code string) (*oauth2.Token, error) {
+	ctx := context.Background()
+	o := oauth2.SetAuthURLParam("code_verifier", y.yahooOAuth2.codeVerifier)
+	token, err := y.yahooOAuth2.config.Exchange(ctx, code, o)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("Error authorizing token: %s\n", err)
 	}
-	m, _ := url.ParseQuery(u.RawQuery)
-	fmt.Println(m, u.RawQuery)
-	return ""
+	return token, nil
+}
+
+func (y *yahooClient) GetAuthCodeUrl() (string, error) {
+	sha2 := sha256.New()
+	io.WriteString(sha2, y.yahooOAuth2.codeVerifier)
+	codeChallenge := base64.RawURLEncoding.EncodeToString(sha2.Sum(nil))
+	o1 := oauth2.SetAuthURLParam("code_challenge_method", "S256")
+	o2 := oauth2.SetAuthURLParam("code_challenge", codeChallenge)
+	authCodeUrl := y.yahooOAuth2.config.AuthCodeURL(y.yahooOAuth2.state, o1, o2)
+	return authCodeUrl, nil
+}
+
+func (y *yahooClient) WithAccessToken(accessToken string) IYahooClient {
+	y.requestor.authorizationDecorator = func(req *http.Request) *http.Request {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+		return req
+	}
+	return y
+}
+
+func (y *yahooClient) WithOAuth2(clientID, clientSecret, redirectURL string) IYahooClient {
+	codeVerifier, err := randomBytesInHex(32) // 64 character string here
+	if err != nil {
+		return nil
+	}
+	yo2 := &YahooOAuth2{
+		config: &oauth2.Config{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			RedirectURL:  redirectURL,
+			Scopes:       []string{"openid"},
+			Endpoint:     yahoo.Endpoint,
+		},
+		state:        generateState(),
+		codeVerifier: codeVerifier,
+	}
+	y.yahooOAuth2 = *yo2
+	return y
+}
+
+func (y *yahooClient) GetGame(ctx context.Context, gameKey string) (*Game, error) {
+	var fc FantasyContent
+	_, err := y.requestor.Get(ctx, fmt.Sprintf("%s/game/%s", y.baseUrl, gameKey), &fc)
+	if err != nil {
+		return nil, err
+	}
+	return &fc.Game, nil
+}
+
+func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*League, error) {
+	panic("implement me")
+}
+
+func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (*League, error) {
+	//TODO implement me
+	panic("implement me")
 }

@@ -1,0 +1,20 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/gofantasy"
+)
+
+var accessToken = "DBtSr1.YtF3JAI6rMZ5VzBNIUpJsO6tNgOXnnfgxrhyuT7Udk0hN.W16wVttKssTivhlkKG03sLlXHlnNqQD9SaVbCG3D3NL7sEJfWRfOC5KB1JfyIyTPqHB5Uv1m0sWcr.5YpV6IpiEMrcqkiMStmaexc6BGBT4.LZ80LVPmk1F6cQ8tSZZIdA40jB_DQF7TDLz8uPHf0CL2PsxW4BYBrV.fCN6neIVlrzEabSHa4JvzgkJH_UmuK.k.hAnAzbtKektZ0NeDd4QU8c4S7kpJcQ0yHROt6zC6bMO2Mk.bcg5ZyiKjdKZRAk.utpZ_2HsPglOhgr1sxbVKljfqpqJACL40.9TYJQrhDAbR9WtMQ2r5jK1VIn7llMVfsdaUFvTJiSEvIxNWDOXF1qSbeP3CPuTV3lbFCphUyMfuwxtV32jXThrnLAQEM9JbwALeVwpnzJkoDZuMhwBGWZCL_waAbuX87Op1DXFun_ux6L4AYoaA1YqQTaHf9ijeOQx.VFJdljyywSJgpSYzR0ZHBeRthH0bE2HmJghbh6deyZOSToy4nQOssAhS2GCP3tvonLU7waJ0l994tpQzy_iDdNHLATgDzX5YOf3S7C0Fq3ukRfVSWhhKQn9k4.1vq1xhaGRly_L7UQKh_k.xDPpzIGnx3_7C1T29s6Wsk.WFkfD9C21SYyVEmCZT56YngTNZXTAWIGy9hmPXiNHO5s3c.9bynppaglsrFyUWgod97XFa29pH9vqYHgdPWrhnylNlFTFgKOgaFhGcFUF7WexSNT9ZWmX.SZ4n0LltGl29aPNahuBDLQw9AaF8jpEfQwN.deV3_SCrGvFPT53yoKnkGPTGlxn7Ca.F9gyhqhJx.zM2PsuuTtFHn_XWaImUtdm9k6CI8ijJ1f5E1asdNanFnI_PsYka3nD_qu.9xmxiF9GEpaDt13S8e72Nm7LdGRKJ_g4Dr_95m7zvjBCHLcvJCuCBS8vQ3Zl5FCxsDy9cm6XpMn1L0gDEzQzUlAzgkGkZk_Z82kUVm6G6HEvCuXoOCDuLffzszp2g_Mc"
+
+func main() {
+	ctx := context.Background()
+	yc := gofantasy.NewClient().Yahoo().WithAccessToken(accessToken)
+	game, err := yc.GetGame(ctx, "nfl")
+	if err != nil {
+		fmt.Printf("error occurred while getting game: %v", err)
+		return
+	}
+	fmt.Println(game)
+}

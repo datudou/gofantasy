@@ -16,17 +16,17 @@ type httpRequestBuilder struct {
 
 func newRequestBuilder() *httpRequestBuilder {
 	return &httpRequestBuilder{
-		marshaller: &jsonMarshaller{},
+		marshaller: &xmlMarshaller{},
 	}
 }
 
-func (b *httpRequestBuilder) build(ctx context.Context, method, url string, request any) (*http.Request, error) {
+func (h *httpRequestBuilder) build(ctx context.Context, method, url string, request any) (*http.Request, error) {
 	if request == nil {
 		return http.NewRequestWithContext(ctx, method, url, nil)
 	}
 
 	var reqBytes []byte
-	reqBytes, err := b.marshaller.marshal(request)
+	reqBytes, err := h.marshaller.marshal(request)
 	if err != nil {
 		return nil, err
 	}

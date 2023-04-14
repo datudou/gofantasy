@@ -1,79 +1,58 @@
 package gofantasy
 
 import (
-	"encoding/json"
-	"encoding/xml"
-	"fmt"
 	"net/http"
-	"strings"
+	"time"
 )
 
-// Client is OpenAI GPT-3 API client.
-type Client struct {
-	config ClientConfig
+type IClient interface {
+	// WithOptions allows providing additional client options such as WithHTTPDebugging. These are not commonly needed.
+	WithOptions(opts ...ClientOption) IClient
 
-	requestBuilder requestBuilder
+	Yahoo() IYahooClient
+	ESPN() IEspnClient
 }
 
-// NewClient creates new OpenAI API client.
-func NewClient(authToken string) *Client {
-	config := DefaultConfig(authToken)
-	return NewClientWithConfig(config)
+type client struct {
+	yahooClient *yahooClient
+	espnClient  *espnClient
+	requestor   *requestor
 }
 
-// NewClientWithConfig creates new OpenAI API client for specified config.
-func NewClientWithConfig(config ClientConfig) *Client {
-	return &Client{
-		config:         config,
-		requestBuilder: newRequestBuilder(),
-	}
+var defaultHTTPClient = &http.Client{
+	Timeout: time.Second * 30,
+	Transport: &http.Transport{
+		TLSHandshakeTimeout: 10 * time.Second,
+	},
 }
 
-func (c *Client) sendRequest(req *http.Request, v interface{}) error {
-	req.Header.Set("Accept", "application/json; charset=utf-8")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.config.authToken))
-
-	// Check whether Content-Type is already set, Upload Files API requires
-	// Content-Type == multipart/form-data
-	contentType := req.Header.Get("Content-Type")
-	if contentType == "" {
-		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+func NewClient(opts ...ClientOption) IClient {
+	r := &requestor{
+		httpClient: defaultHTTPClient,
 	}
-
-	res, err := c.config.HTTPClient.Do(req)
-	fmt.Println(res)
-	if err != nil {
-		return err
+	c := &client{
+		requestor: r,
 	}
+	c.WithOptions(opts...)
 
-	defer res.Body.Close()
-
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
-		var errRes ErrorResponse
-		err = json.NewDecoder(res.Body).Decode(&errRes)
-		if err != nil || errRes.Error == nil {
-			reqErr := RequestError{
-				StatusCode: res.StatusCode,
-				Err:        err,
-			}
-			return fmt.Errorf("error, %w", &reqErr)
-		}
-		errRes.Error.StatusCode = res.StatusCode
-		return fmt.Errorf("error, status code: %d, message: %w", res.StatusCode, errRes.Error)
+	c.yahooClient = &yahooClient{
+		baseUrl:   YahooBaseURL,
+		requestor: r,
 	}
-
-	if v != nil {
-		if err = xml.NewDecoder(res.Body).Decode(v); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return c
 }
 
-func (c *Client) fullURL(suffix string) string {
-	baseURL := c.config.BaseURL
-	baseURL = strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf("%s/%s/%s/%s",
-		baseURL, "league", "223.l.431", "settings")
+func (c *client) WithOptions(opts ...ClientOption) IClient {
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+func (c *client) Yahoo() IYahooClient {
+	return c.yahooClient
+}
+
+func (c *client) ESPN() IEspnClient {
+	return c.espnClient
 }
