@@ -12,15 +12,16 @@ type IClient interface {
 	Yahoo() IYahooClient
 	ESPN() IEspnClient
 }
+type ICache interface {
+}
 
 type client struct {
-	yahooClient *yahooClient
-	espnClient  *espnClient
-	requestor   *requestor
+	requestor *requestor
+	cache     ICache
 }
 
 var defaultHTTPClient = &http.Client{
-	Timeout: time.Second * 30,
+	Timeout: time.Second * 10,
 	Transport: &http.Transport{
 		TLSHandshakeTimeout: 10 * time.Second,
 	},
@@ -35,10 +36,6 @@ func NewClient(opts ...ClientOption) IClient {
 	}
 	c.WithOptions(opts...)
 
-	c.yahooClient = &yahooClient{
-		baseUrl:   YahooBaseURL,
-		requestor: r,
-	}
 	return c
 }
 
@@ -50,9 +47,14 @@ func (c *client) WithOptions(opts ...ClientOption) IClient {
 }
 
 func (c *client) Yahoo() IYahooClient {
-	return c.yahooClient
+	return &yahooClient{
+		baseUrl:   YahooBaseURL,
+		requestor: c.requestor,
+	}
 }
 
 func (c *client) ESPN() IEspnClient {
-	return c.espnClient
+	return &espnClient{
+		baseUrl: YahooBaseURL,
+	}
 }

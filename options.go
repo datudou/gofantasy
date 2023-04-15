@@ -20,3 +20,9 @@ func WithHTTPDebugging(request bool, response bool) ClientOption {
 		c.requestor.responseDebugging = response
 	}
 }
+
+func WithCache() ClientOption {
+	return func(c *client) {
+
+	}
+}

@@ -92,7 +92,7 @@ type Division struct {
 	Name       string `xml:"name"`
 }
 
-type YahooOAuth2 struct {
+type yahooOAuth2 struct {
 	config       *oauth2.Config
 	state        string
 	codeVerifier string
@@ -112,7 +112,7 @@ type IYahooClient interface {
 type yahooClient struct {
 	baseUrl     string
 	requestor   *requestor
-	yahooOAuth2 YahooOAuth2
+	yahooOAuth2 yahooOAuth2
 	token       oauth2.Token
 }
 
@@ -164,7 +164,7 @@ func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooC
 	if err != nil {
 		return nil
 	}
-	yo2 := &YahooOAuth2{
+	yo2 := &yahooOAuth2{
 		config: &oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
