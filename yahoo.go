@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/yahoo"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -90,63 +92,46 @@ type Division struct {
 	Name       string `xml:"name"`
 }
 
-const (
-	// YahooBaseURL is the base URL for all calls to Yahoo's fantasy sports API
-	YahooBaseURL = "https://fantasysports.yahooapis.com/fantasy/v2"
-)
-
 type YahooOAuth2 struct {
 	config       *oauth2.Config
 	state        string
 	codeVerifier string
 }
 
-func generateState() string {
-	b := make([]byte, 128)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-	state := base64.URLEncoding.EncodeToString(b)
-	return state
-}
-
-func randomBytesInHex(count int) (string, error) {
-	buf := make([]byte, count)
-	_, err := io.ReadFull(rand.Reader, buf)
-	if err != nil {
-		return "", fmt.Errorf(" Could not generate %d random bytes: %v", count, err)
-	}
-
-	return hex.EncodeToString(buf), nil
-}
-
 type IYahooClient interface {
-	WithAccessToken(accessToken string) IYahooClient
-	WithOAuth2(clientID, clientSecret, redirectURL string) IYahooClient
+	WithAccessToken(accessToken string) (IYahooClient, error)
+	OAuth2(clientID, clientSecret, redirectURL string) IYahooClient
 	GetGame(ctx context.Context, gameKey string) (*Game, error)
 	GetLeague(ctx context.Context, leagueID string) (*League, error)
 	GetLeagueSettings(ctx context.Context, leagueID string) (*League, error)
 	GetAuthCodeUrl() (string, error)
-	GetAccessToken(code string) (*oauth2.Token, error)
+	GetAccessToken(code string) IYahooClient
+	SaveToken(path string) error
 }
 
 type yahooClient struct {
 	baseUrl     string
 	requestor   *requestor
 	yahooOAuth2 YahooOAuth2
+	token       oauth2.Token
 }
 
 var _ IYahooClient = &yahooClient{}
 
-func (y *yahooClient) GetAccessToken(code string) (*oauth2.Token, error) {
+func (y *yahooClient) SaveToken(path string) error {
+	return saveToken(y.token, path)
+}
+
+func (y *yahooClient) GetAccessToken(code string) IYahooClient {
 	ctx := context.Background()
 	o := oauth2.SetAuthURLParam("code_verifier", y.yahooOAuth2.codeVerifier)
 	token, err := y.yahooOAuth2.config.Exchange(ctx, code, o)
 	if err != nil {
-		return nil, fmt.Errorf("Error authorizing token: %s\n", err)
+		fmt.Printf("Error authorizing token: %s\n", err)
+		return nil
 	}
-	return token, nil
+	y.token = *token
+	return y
 }
 
 func (y *yahooClient) GetAuthCodeUrl() (string, error) {
@@ -159,15 +144,22 @@ func (y *yahooClient) GetAuthCodeUrl() (string, error) {
 	return authCodeUrl, nil
 }
 
-func (y *yahooClient) WithAccessToken(accessToken string) IYahooClient {
+func (y *yahooClient) WithAccessToken(accessToken string) (IYahooClient, error) {
+	if accessToken == "" {
+		err := readToken("", &y.token)
+		if err != nil {
+			return nil, err
+		}
+		accessToken = y.token.AccessToken
+	}
 	y.requestor.authorizationDecorator = func(req *http.Request) *http.Request {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 		return req
 	}
-	return y
+	return y, nil
 }
 
-func (y *yahooClient) WithOAuth2(clientID, clientSecret, redirectURL string) IYahooClient {
+func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooClient {
 	codeVerifier, err := randomBytesInHex(32) // 64 character string here
 	if err != nil {
 		return nil
@@ -197,10 +189,84 @@ func (y *yahooClient) GetGame(ctx context.Context, gameKey string) (*Game, error
 }
 
 func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*League, error) {
-	panic("implement me")
+	var fc FantasyContent
+	_, err := y.requestor.Get(ctx, fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID), &fc)
+	if err != nil {
+		return nil, err
+	}
+	return &fc.League, nil
 }
 
 func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (*League, error) {
 	//TODO implement me
 	panic("implement me")
+}
+
+// use in yahoo oauth2
+func generateState() string {
+	b := make([]byte, 128)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+	state := base64.URLEncoding.EncodeToString(b)
+	return state
+}
+
+func randomBytesInHex(count int) (string, error) {
+	buf := make([]byte, count)
+	_, err := io.ReadFull(rand.Reader, buf)
+	if err != nil {
+		return "", fmt.Errorf(" Could not generate %d random bytes: %v", count, err)
+	}
+
+	return hex.EncodeToString(buf), nil
+}
+
+func saveToken(token oauth2.Token, path string) error {
+	if path == "" {
+		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
+	}
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		if !os.IsExist(err) {
+			err := os.Mkdir(os.Getenv("HOME")+"/.config/gofantasy", 0755)
+			if err != nil {
+				return err
+			}
+			f, err = os.Create(path)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	defer f.Close()
+	t, _ := json.Marshal(token)
+	_, err = f.Write(t)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func readToken(path string, t *oauth2.Token) error {
+	if path == "" {
+		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	byteValue, err := io.ReadAll(f)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal([]byte(byteValue), t)
+	if err != nil {
+		panic(err)
+	}
+	return nil
 }
