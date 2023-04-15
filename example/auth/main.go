@@ -10,7 +10,7 @@ import (
 func main() {
 	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
 	clientID := os.Getenv("YAHOO_CLIENT_ID")
-	yc := gofantasy.NewClient().Yahoo().WithOAuth2(clientID, "", redirectURL)
+	yc := gofantasy.NewClient().Yahoo().OAuth2(clientID, "", redirectURL)
 	authCodeUrl, err := yc.GetAuthCodeUrl()
 	if err != nil {
 		fmt.Println(err)
