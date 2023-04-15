@@ -1,6 +1,7 @@
 package gofantasy
 
 import (
+	lru "github.com/hashicorp/golang-lru/v2"
 	"net/http"
 	"time"
 )
@@ -8,25 +9,24 @@ import (
 type IClient interface {
 	// WithOptions allows providing additional client options such as WithHTTPDebugging. These are not commonly needed.
 	WithOptions(opts ...ClientOption) IClient
-
 	Yahoo() IYahooClient
 	ESPN() IEspnClient
 }
 
 type client struct {
-	yahooClient *yahooClient
-	espnClient  *espnClient
-	requestor   *requestor
+	requestor *requestor
+	cache     *lru.Cache[interface{}, interface{}]
 }
 
 var defaultHTTPClient = &http.Client{
-	Timeout: time.Second * 30,
+	Timeout: time.Second * 10,
 	Transport: &http.Transport{
 		TLSHandshakeTimeout: 10 * time.Second,
 	},
 }
 
 func NewClient(opts ...ClientOption) IClient {
+
 	r := &requestor{
 		httpClient: defaultHTTPClient,
 	}
@@ -35,10 +35,6 @@ func NewClient(opts ...ClientOption) IClient {
 	}
 	c.WithOptions(opts...)
 
-	c.yahooClient = &yahooClient{
-		baseUrl:   YahooBaseURL,
-		requestor: r,
-	}
 	return c
 }
 
@@ -50,9 +46,14 @@ func (c *client) WithOptions(opts ...ClientOption) IClient {
 }
 
 func (c *client) Yahoo() IYahooClient {
-	return c.yahooClient
+	return &yahooClient{
+		baseUrl:    YahooBaseURL,
+		baseClient: c,
+	}
 }
 
 func (c *client) ESPN() IEspnClient {
-	return c.espnClient
+	return &espnClient{
+		baseUrl: YahooBaseURL,
+	}
 }

@@ -3,6 +3,7 @@ module github.com/gofantasy
 go 1.20
 
 require (
+	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/sirupsen/logrus v1.9.0
 	golang.org/x/oauth2 v0.7.0
 )
