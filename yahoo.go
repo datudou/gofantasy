@@ -111,15 +111,15 @@ type IYahooClient interface {
 
 type yahooClient struct {
 	baseUrl     string
-	requestor   *requestor
-	yahooOAuth2 yahooOAuth2
+	baseClient  *client
+	yahooOAuth2 *yahooOAuth2
 	token       oauth2.Token
 }
 
 var _ IYahooClient = &yahooClient{}
 
 func (y *yahooClient) SaveToken(path string) error {
-	return saveToken(y.token, path)
+	return saveToken(&y.token, path)
 }
 
 func (y *yahooClient) GetAccessToken(code string) IYahooClient {
@@ -152,7 +152,7 @@ func (y *yahooClient) WithAccessToken(accessToken string) (IYahooClient, error) 
 		}
 		accessToken = y.token.AccessToken
 	}
-	y.requestor.authorizationDecorator = func(req *http.Request) *http.Request {
+	y.baseClient.requestor.authorizationDecorator = func(req *http.Request) *http.Request {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 		return req
 	}
@@ -175,13 +175,14 @@ func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooC
 		state:        generateState(),
 		codeVerifier: codeVerifier,
 	}
-	y.yahooOAuth2 = *yo2
+	y.yahooOAuth2 = yo2
 	return y
 }
 
 func (y *yahooClient) GetGame(ctx context.Context, gameKey string) (*Game, error) {
-	var fc FantasyContent
-	_, err := y.requestor.Get(ctx, fmt.Sprintf("%s/game/%s", y.baseUrl, gameKey), &fc)
+	cacheKey := fmt.Sprintf("game%s", gameKey)
+	endpoint := fmt.Sprintf("%s/game/%s", y.baseUrl, gameKey)
+	fc, err := y.getCachedOrFetch(ctx, cacheKey, endpoint, "game")
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +190,9 @@ func (y *yahooClient) GetGame(ctx context.Context, gameKey string) (*Game, error
 }
 
 func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*League, error) {
-	var fc FantasyContent
-	_, err := y.requestor.Get(ctx, fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID), &fc)
+	cacheKey := fmt.Sprintf("league%s", leagueID)
+	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
+	fc, err := y.getCachedOrFetch(ctx, cacheKey, endpoint, "league")
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +202,25 @@ func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*League, 
 func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (*League, error) {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (y *yahooClient) getCachedOrFetch(ctx context.Context, cacheKey, endpoint string, objType string) (*FantasyContent, error) {
+	var fc FantasyContent
+	if y.baseClient.cache != nil {
+		v, exist := y.baseClient.cache.Get(cacheKey)
+		if exist {
+			fmt.Println("----> cache hit!")
+			return v.(*FantasyContent), nil
+		}
+	}
+	_, err := y.baseClient.requestor.Get(ctx, endpoint, &fc)
+	if err != nil {
+		return nil, err
+	}
+	if y.baseClient.cache != nil {
+		y.baseClient.cache.Add(cacheKey, &fc)
+	}
+	return &fc, nil
 }
 
 // use in yahoo oauth2
@@ -223,7 +244,7 @@ func randomBytesInHex(count int) (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func saveToken(token oauth2.Token, path string) error {
+func saveToken(token *oauth2.Token, path string) error {
 	if path == "" {
 		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
 	}

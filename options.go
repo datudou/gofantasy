@@ -1,6 +1,9 @@
 package gofantasy
 
-import "net/http"
+import (
+	lru "github.com/hashicorp/golang-lru/v2"
+	"net/http"
+)
 
 type ClientOption func(*client)
 
@@ -23,6 +26,6 @@ func WithHTTPDebugging(request bool, response bool) ClientOption {
 
 func WithCache() ClientOption {
 	return func(c *client) {
-
+		c.cache, _ = lru.New[interface{}, interface{}](128)
 	}
 }
