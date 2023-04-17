@@ -1,4 +1,4 @@
-package yahoo
+package gofantasy
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2/yahoo"
 	"io"
 	"os"
+	"time"
 )
 
 type yahooOAuth2 struct {
@@ -24,24 +25,71 @@ type yahooOAuth2 struct {
 type IYahooOAuth2 interface {
 	OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
 	GetAuthCodeUrl() (string, error)
-	GetAccessToken(code string) IYahooOAuth2
+	GetAccessToken(code string) error
 	SaveToken(path string) error
+	LoadAccessToken(path string) (*oauth2.Token, error)
+}
+
+var _ IYahooOAuth2 = &yahooOAuth2{}
+
+func (y *yahooOAuth2) RefreshToken() error {
+	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
+	clientID := os.Getenv("YAHOO_CLIENT_ID")
+	oc := &oauth2.Config{
+		ClientID:    clientID,
+		RedirectURL: redirectURL,
+		Scopes:      []string{"openid"},
+		Endpoint:    yahoo.Endpoint,
+	}
+	token := &oauth2.Token{
+		RefreshToken: y.token.RefreshToken,
+	}
+	// Create a context
+	ctx := context.Background()
+
+	// Create a TokenSource using the configuration and the provided token
+	tokenSource := oc.TokenSource(ctx, token)
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		fmt.Printf("Error refreshing token: %v\n", err)
+		return err
+	}
+	y.token = *newToken
+	return nil
+}
+
+func (y *yahooOAuth2) LoadAccessToken(path string) (*oauth2.Token, error) {
+	err := readToken(path, &y.token)
+	if y.token.Expiry.UTC().Before(time.Now().UTC()) {
+		err = y.RefreshToken()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &y.token, nil
 }
 
 func (y *yahooOAuth2) SaveToken(path string) error {
 	return saveToken(&y.token, path)
 }
 
-func (y *yahooOAuth2) GetAccessToken(code string) IYahooOAuth2 {
+func (y *yahooOAuth2) GetAccessToken(code string) error {
 	ctx := context.Background()
 	o := oauth2.SetAuthURLParam("code_verifier", y.codeVerifier)
-	token, err := y.config.Exchange(ctx, code, o)
+	token, err := y.getAccessToken(ctx, code, o)
 	if err != nil {
-		fmt.Printf("Error authorizing token: %s\n", err)
-		return nil
+		return err
 	}
 	y.token = *token
-	return y
+	return nil
+}
+
+func (y *yahooOAuth2) getAccessToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	token, err := y.config.Exchange(ctx, code, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
 }
 
 func (y *yahooOAuth2) GetAuthCodeUrl() (string, error) {
@@ -74,7 +122,7 @@ func (y *yahooOAuth2) OAuth2(clientID, clientSecret, redirectURL string) IYahooO
 
 func saveToken(token *oauth2.Token, path string) error {
 	if path == "" {
-		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
+		path = os.Getenv("HOME") + YahooTokenPath
 	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
@@ -101,9 +149,6 @@ func saveToken(token *oauth2.Token, path string) error {
 }
 
 func readToken(path string, t *oauth2.Token) error {
-	if path == "" {
-		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
-	}
 	f, err := os.Open(path)
 	if err != nil {
 		panic(err)

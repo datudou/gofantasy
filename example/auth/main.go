@@ -11,12 +11,11 @@ func main() {
 	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
 	clientID := os.Getenv("YAHOO_CLIENT_ID")
 
-	yc := gofantasy.
+	ya := gofantasy.
 		NewClient().
-		Yahoo().
-		OAuth2(clientID, "", redirectURL)
+		Yahoo().OAuth2(clientID, "", redirectURL)
 
-	authCodeUrl, err := yc.GetAuthCodeUrl()
+	authCodeUrl, err := ya.GetAuthCodeUrl()
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -30,7 +29,11 @@ func main() {
 		return
 	}
 
-	err = yc.GetAccessToken(code).SaveToken("")
+	err = ya.GetAccessToken(code)
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = ya.SaveToken("~/.config/gofantasy/yahoo_token.json")
 	if err != nil {
 		fmt.Println(err)
 	}

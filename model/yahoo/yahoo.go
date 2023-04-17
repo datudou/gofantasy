@@ -11,6 +11,7 @@ type FantasyContent struct {
 	XMLName xml.Name `xml:"fantasy_content"`
 	League  League   `xml:"league"`
 	Users   []User   `xml:"users>user"`
+	Games   []Game   `xml:"games>game"`
 }
 
 type User struct {

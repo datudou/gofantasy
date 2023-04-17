@@ -10,7 +10,7 @@ type IClient interface {
 	// WithOptions allows providing additional client options such as WithHTTPDebugging. These are not commonly needed.
 	WithOptions(opts ...ClientOption) IClient
 	Yahoo() IYahooClient
-	ESPN() IEspnClient
+	//ESPN() IEspnClient
 }
 
 type client struct {
@@ -47,13 +47,14 @@ func (c *client) WithOptions(opts ...ClientOption) IClient {
 
 func (c *client) Yahoo() IYahooClient {
 	return &yahooClient{
-		baseUrl:    YahooBaseURL,
-		baseClient: c,
+		baseUrl:     YahooBaseURL,
+		baseClient:  c,
+		yahooOAuth2: &yahooOAuth2{},
 	}
 }
 
-func (c *client) ESPN() IEspnClient {
-	return &espnClient{
-		baseUrl: YahooBaseURL,
-	}
-}
+//func (c *client) ESPN() IEspnClient {
+//	return &espnClient{
+//		baseUrl: YahooBaseURL,
+//	}
+//}
