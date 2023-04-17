@@ -24,8 +24,10 @@ func WithHTTPDebugging(request bool, response bool) ClientOption {
 	}
 }
 
-func WithCache() ClientOption {
+// WithCache provide lru cache for caching responses.  This is useful for reducing the number of requests made to the server side.
+// The cache use golang-lru library, so the size is the number of items to store in the cache.
+func WithCache(size int) ClientOption {
 	return func(c *client) {
-		c.cache, _ = lru.New[interface{}, interface{}](128)
+		c.cache, _ = lru.New[interface{}, interface{}](size)
 	}
 }

@@ -11,18 +11,14 @@ func main() {
 	ctx := context.Background()
 	yc, err := gofantasy.
 		NewClient().
-		WithOptions(gofantasy.WithCache()).
+		WithOptions(gofantasy.WithCache(128)).
 		Yahoo().
 		WithAccessToken("")
+
 	if err != nil {
 		panic(err)
 	}
 
-	//league, err := yc.GetLeague(ctx, "223.l.431")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//fmt.Printf("%+v", league)
 	for {
 		go func() {
 			game, err := yc.GetGame(ctx, "nfl")
