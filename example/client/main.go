@@ -13,7 +13,7 @@ func main() {
 		NewClient().
 		WithOptions(gofantasy.WithCache(128)).
 		Yahoo().
-		WithAccessToken("")
+		WithAccessToken("") // if pass "" , it will read token object from the file saved at  ~/.config/gofantasy/yahoo_token.json
 
 	if err != nil {
 		panic(err)

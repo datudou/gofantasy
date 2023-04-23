@@ -1,4 +1,6 @@
 # GoFantasy
+## About
+GoFantasy is a go api wrapper for kind of fantasy platforms like Yahoo fantasy, ESPN and so on. 
 
 ## Target
 Currently, GoFantasy is still on its early stages of development. The following platforms are will be supported:
