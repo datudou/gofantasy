@@ -15,7 +15,7 @@ type requestDecorator func(*http.Request) *http.Request
 
 type requestor struct {
 	baseURL                string
-	authorizationDecorator requestDecorator
+	AuthorizationDecorator requestDecorator
 	requestDebugging       bool
 	responseDebugging      bool
 	httpClient             *http.Client
@@ -23,8 +23,8 @@ type requestor struct {
 
 func (r *requestor) execute(
 	ctx context.Context,
-	path string, method string, toPostInput interface{}, into interface{},
-	reqDecorator requestDecorator,
+	path string, method string, toPostInput interface{}, into any,
+	reqDecorator requestDecorator, d decoder,
 ) (*http.Response, error) {
 	url := fmt.Sprintf("%s%s", r.baseURL, path)
 
@@ -49,8 +49,8 @@ func (r *requestor) execute(
 	}
 	req = req.WithContext(ctx)
 
-	if r.authorizationDecorator != nil {
-		r.authorizationDecorator(req)
+	if r.AuthorizationDecorator != nil {
+		r.AuthorizationDecorator(req)
 	}
 
 	if reqDecorator != nil {
@@ -96,7 +96,7 @@ func (r *requestor) execute(
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		var errRes ErrorResponse
-		err = xml.NewDecoder(resp.Body).Decode(&errRes)
+		err = d.decode(resp.Body, &errRes)
 		if err != nil || errRes.Error == nil {
 			reqErr := RequestError{
 				StatusCode: resp.StatusCode,
@@ -113,32 +113,52 @@ func (r *requestor) execute(
 		// Do not bother with response body stuff; none expected
 	} else {
 		if into != nil {
-			if err := xml.NewDecoder(toDecode).Decode(into); err != nil {
+			if err := d.decode(toDecode, into); err != nil {
 				return resp, fmt.Errorf("failed parsing the response from %s:%s", method, path)
 			}
 		}
 	}
-
 	return resp, nil
 }
 
-func (r *requestor) Get(ctx context.Context, path string, into interface{}) (*http.Response, error) {
-	return r.execute(ctx, path, "GET", nil, into, jsonDecorator)
+type decoder interface {
+	decode(reader io.Reader, into any) error
 }
 
-func (r *requestor) Post(ctx context.Context, path string, toPost interface{}, into interface{}) (*http.Response, error) {
-	return r.execute(ctx, path, "POST", toPost, into, jsonDecorator)
+type xmlDecoder struct{}
+
+func (*xmlDecoder) decode(reader io.Reader, into any) error {
+	return xml.NewDecoder(reader).Decode(into)
 }
 
-func (r *requestor) Patch(ctx context.Context, path string, toPatch interface{}, into interface{}) (*http.Response, error) {
-	return r.execute(ctx, path, "PATCH", toPatch, into, jsonDecorator)
+type jsonDecoder struct{}
+
+func (*jsonDecoder) jsonDecoder(reader io.Reader, into any) error {
+	return json.NewDecoder(reader).Decode(into)
 }
 
-func (r *requestor) Delete(ctx context.Context, path string, into interface{}) (*http.Response, error) {
-	return r.execute(ctx, path, "DELETE", nil, into, jsonDecorator)
+func (r *requestor) Get(ctx context.Context, path string, into any, decorator requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "GET", nil, into, decorator, d)
 }
+
+//func (r *requestor) Post(ctx context.Context, path string, toPost interface{}, into interface{}) (*http.Response, error) {
+//	return r.execute(ctx, path, "POST", toPost, into, jsonDecorator, decoder)
+//}
+//
+//func (r *requestor) Patch(ctx context.Context, path string, toPatch interface{}, into interface{}) (*http.Response, error) {
+//	return r.execute(ctx, path, "PATCH", toPatch, into, jsonDecorator, xml)
+//}
+//
+//func (r *requestor) Delete(ctx context.Context, path string, into interface{}) (*http.Response, error) {
+//	return r.execute(ctx, path, "DELETE", nil, into, jsonDecorator)
+//}
 
 func jsonDecorator(req *http.Request) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func xmlDecorator(req *http.Request) *http.Request {
+	req.Header.Set("Content-Type", "application/xml")
 	return req
 }

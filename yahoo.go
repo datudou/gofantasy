@@ -2,292 +2,122 @@ package gofantasy
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"encoding/xml"
+	"crypto"
 	"fmt"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/yahoo"
+	"github.com/gofantasy/model/yahoo"
 	"io"
 	"net/http"
 	"os"
-	"time"
 )
 
-// FantasyContent is the root level response containing the data from a request
-// to the fantasy sports API.
-type FantasyContent struct {
-	XMLName xml.Name `xml:"fantasy_content"`
-	League  League   `xml:"league"`
-	Game    Game     `xml:"game"`
-}
-
-type Game struct {
-	GameKey string `xml:"game_key"`
-	GameID  string `xml:"game_id"`
-	Name    string `xml:"name"`
-	Code    string `xml:"code"`
-	Type    string `xml:"type"`
-	URL     string `xml:"url"`
-	Season  string `xml:"season"`
-}
-
-type League struct {
-	LeagueKey             string   `xml:"league_key"`
-	LeagueID              string   `xml:"league_id"`
-	Name                  string   `xml:"name"`
-	URL                   string   `xml:"url"`
-	DraftStatus           string   `xml:"draft_status"`
-	NumTeams              int      `xml:"num_teams"`
-	EditKey               int      `xml:"edit_key"`
-	WeeklyDeadline        string   `xml:"weekly_deadline"`
-	LeagueUpdateTimestamp int64    `xml:"league_update_timestamp"`
-	ScoringType           string   `xml:"scoring_type"`
-	CurrentWeek           int      `xml:"current_week"`
-	StartWeek             int      `xml:"start_week"`
-	EndWeek               int      `xml:"end_week"`
-	GameCode              string   `xml:"game_code"`
-	IsFinished            int      `xml:"is_finished"`
-	Season                int      `xml:"season"`
-	Settings              Settings `xml:"settings"`
-}
-
-type RosterPosition struct {
-	Position string `xml:"position"`
-	Count    int    `xml:"count"`
-}
-
-type Settings struct {
-	DraftType               string           `xml:"draft_type"`
-	ScoringType             string           `xml:"scoring_type"`
-	UsesPlayoff             bool             `xml:"uses_playoff"`
-	PlayoffStartWeek        int              `xml:"playoff_start_week"`
-	UsesPlayoffReseeding    bool             `xml:"uses_playoff_reseeding"`
-	UsesLockEliminatedTeams bool             `xml:"uses_lock_eliminated_teams"`
-	UsesFAAB                bool             `xml:"uses_faab"`
-	TradeEndDate            time.Time        `xml:"trade_end_date"`
-	TradeRatifyType         string           `xml:"trade_ratify_type"`
-	TradeRejectTime         int              `xml:"trade_reject_time"`
-	RosterPositions         []RosterPosition `xml:"roster_positions>roster_position"`
-	StatCategories          []Stat           `xml:"stat_categories>stats>stat"`
-	StatModifiers           []Stat           `xml:"stat_modifiers>stats>stat"`
-	Divisions               []Division       `xml:"divisions>division"`
-}
-
-type Stat struct {
-	StatID       int    `xml:"stat_id"`
-	Enabled      int    `xml:"enabled"`
-	Name         string `xml:"name"`
-	DisplayName  string `xml:"display_name"`
-	SortOrder    int    `xml:"sort_order"`
-	PositionType string `xml:"position_type"`
-	Value        int    `xml:"value"`
-}
-
-type Division struct {
-	DivisionID int    `xml:"division_id"`
-	Name       string `xml:"name"`
-}
-
-type yahooOAuth2 struct {
-	config       *oauth2.Config
-	state        string
-	codeVerifier string
-}
-
 type IYahooClient interface {
-	WithAccessToken(accessToken string) (IYahooClient, error)
-	OAuth2(clientID, clientSecret, redirectURL string) IYahooClient
-	GetGame(ctx context.Context, gameKey string) (*Game, error)
-	GetLeague(ctx context.Context, leagueID string) (*League, error)
-	GetLeagueSettings(ctx context.Context, leagueID string) (*League, error)
-	GetAuthCodeUrl() (string, error)
-	GetAccessToken(code string) IYahooClient
-	SaveToken(path string) error
+	GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error)
+	GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
+	GetUserGames(ctx context.Context, gameKey string) (*yahoo.Game, error)
+	GetUserTeams(ctx context.Context, leagueID string) (*yahoo.User, error)
+	OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
+	LoadAccessToken(path string) (IYahooClient, error)
 }
 
 type yahooClient struct {
 	baseUrl     string
 	baseClient  *client
 	yahooOAuth2 *yahooOAuth2
-	token       oauth2.Token
 }
 
 var _ IYahooClient = &yahooClient{}
 
-func (y *yahooClient) SaveToken(path string) error {
-	return saveToken(&y.token, path)
+func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2 {
+	return y.yahooOAuth2.OAuth2(clientID, clientSecret, redirectURL)
 }
 
-func (y *yahooClient) GetAccessToken(code string) IYahooClient {
-	ctx := context.Background()
-	o := oauth2.SetAuthURLParam("code_verifier", y.yahooOAuth2.codeVerifier)
-	token, err := y.yahooOAuth2.config.Exchange(ctx, code, o)
+func (y *yahooClient) GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
+
+	endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
+	fc, err := y.get(ctx, endpoint, "")
 	if err != nil {
-		fmt.Printf("Error authorizing token: %s\n", err)
-		return nil
+		return nil, err
 	}
-	y.token = *token
-	return y
+	if len(fc.Games) == 0 {
+		return nil, fmt.Errorf("no games found for gameCode %s and season %s", gameCode, season)
+
+	}
+	return &fc.Games, nil
 }
 
-func (y *yahooClient) GetAuthCodeUrl() (string, error) {
-	sha2 := sha256.New()
-	io.WriteString(sha2, y.yahooOAuth2.codeVerifier)
-	codeChallenge := base64.RawURLEncoding.EncodeToString(sha2.Sum(nil))
-	o1 := oauth2.SetAuthURLParam("code_challenge_method", "S256")
-	o2 := oauth2.SetAuthURLParam("code_challenge", codeChallenge)
-	authCodeUrl := y.yahooOAuth2.config.AuthCodeURL(y.yahooOAuth2.state, o1, o2)
-	return authCodeUrl, nil
+func (*yahooClient) GetUserTeams(ctx context.Context, leagueID string) (*yahoo.User, error) {
+	//endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
+	//fc, err := y.get(ctx, endpoint, "")
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if len(fc.Games) == 0 {
+	//	return nil, fmt.Errorf("no games found for gameCode %s and season %s", gameCode, season)
+	//
+	//}
+	//return &fc.Games, nil
+	panic("unimplemented")
 }
 
-func (y *yahooClient) WithAccessToken(accessToken string) (IYahooClient, error) {
-	if accessToken == "" {
-		err := readToken("", &y.token)
-		if err != nil {
-			return nil, err
-		}
-		accessToken = y.token.AccessToken
+func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
+	if path == "" {
+		path = os.Getenv("HOME") + YahooTokenPath
 	}
-	y.baseClient.requestor.authorizationDecorator = func(req *http.Request) *http.Request {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	token, err := y.yahooOAuth2.LoadAccessToken(path)
+	if err != nil {
+		return nil, err
+	}
+	y.baseClient.requestor.AuthorizationDecorator = func(req *http.Request) *http.Request {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 		return req
 	}
 	return y, nil
 }
 
-func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooClient {
-	codeVerifier, err := randomBytesInHex(32) // 64 character string here
-	if err != nil {
-		return nil
-	}
-	yo2 := &yahooOAuth2{
-		config: &oauth2.Config{
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			RedirectURL:  redirectURL,
-			Scopes:       []string{"openid"},
-			Endpoint:     yahoo.Endpoint,
-		},
-		state:        generateState(),
-		codeVerifier: codeVerifier,
-	}
-	y.yahooOAuth2 = yo2
-	return y
-}
-
-func (y *yahooClient) GetGame(ctx context.Context, gameKey string) (*Game, error) {
-	cacheKey := fmt.Sprintf("game%s", gameKey)
-	endpoint := fmt.Sprintf("%s/game/%s", y.baseUrl, gameKey)
-	fc, err := y.getCachedOrFetch(ctx, cacheKey, endpoint, "game")
+func (y *yahooClient) GetUserGames(ctx context.Context, gameKey string) (*yahoo.Game, error) {
+	endpoint := fmt.Sprintf("%s/users;use_login=1/games;games_key=%s", y.baseUrl, gameKey)
+	fc, err := y.get(ctx, endpoint, "")
 	if err != nil {
 		return nil, err
 	}
-	return &fc.Game, nil
+	return &fc.Users[0].Games[0], nil
 }
 
-func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*League, error) {
-	cacheKey := fmt.Sprintf("league%s", leagueID)
+func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error) {
 	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
-	fc, err := y.getCachedOrFetch(ctx, cacheKey, endpoint, "league")
+	fc, err := y.get(ctx, endpoint, "league")
 	if err != nil {
 		return nil, err
 	}
 	return &fc.League, nil
 }
 
-func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (*League, error) {
-	//TODO implement me
+func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (yahoo.League, error) {
 	panic("implement me")
 }
 
-func (y *yahooClient) getCachedOrFetch(ctx context.Context, cacheKey, endpoint string, objType string) (*FantasyContent, error) {
-	var fc FantasyContent
+func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error) {
+	var fc yahoo.FantasyContent
 	if y.baseClient.cache != nil {
-		v, exist := y.baseClient.cache.Get(cacheKey)
+		v, exist := y.baseClient.cache.Get(endpoint)
 		if exist {
-			fmt.Println("----> cache hit!")
-			return v.(*FantasyContent), nil
+			return v.(*yahoo.FantasyContent), nil
 		}
 	}
-	_, err := y.baseClient.requestor.Get(ctx, endpoint, &fc)
+	_, err := y.baseClient.requestor.Get(ctx, endpoint, &fc, xmlDecorator, &xmlDecoder{})
 	if err != nil {
 		return nil, err
 	}
+
 	if y.baseClient.cache != nil {
-		y.baseClient.cache.Add(cacheKey, &fc)
+		y.baseClient.cache.Add(endpoint, &fc)
 	}
 	return &fc, nil
 }
 
-// use in yahoo oauth2
-func generateState() string {
-	b := make([]byte, 128)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-	state := base64.URLEncoding.EncodeToString(b)
-	return state
-}
-
-func randomBytesInHex(count int) (string, error) {
-	buf := make([]byte, count)
-	_, err := io.ReadFull(rand.Reader, buf)
-	if err != nil {
-		return "", fmt.Errorf(" Could not generate %d random bytes: %v", count, err)
-	}
-
-	return hex.EncodeToString(buf), nil
-}
-
-func saveToken(token *oauth2.Token, path string) error {
-	if path == "" {
-		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
-	}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
-	if err != nil {
-		if !os.IsExist(err) {
-			err := os.Mkdir(os.Getenv("HOME")+"/.config/gofantasy", 0755)
-			if err != nil {
-				return err
-			}
-			f, err = os.Create(path)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	}
-	defer f.Close()
-	t, _ := json.Marshal(token)
-	_, err = f.Write(t)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func readToken(path string, t *oauth2.Token) error {
-	if path == "" {
-		path = os.Getenv("HOME") + "/.config/gofantasy/yahoo_token.json"
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	byteValue, err := io.ReadAll(f)
-	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal([]byte(byteValue), t)
-	if err != nil {
-		panic(err)
-	}
-	return nil
+func md5(str string) string {
+	w := crypto.MD5.New()
+	io.WriteString(w, str)
+	md5str := fmt.Sprintf("%x", w.Sum(nil))
+	return md5str
 }
