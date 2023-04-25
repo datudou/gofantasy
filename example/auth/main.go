@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	err = ya.SaveToken("~/.config/gofantasy/yahoo_token.json")
+	err = ya.SaveToken("")
 	if err != nil {
 		fmt.Println(err)
 	}

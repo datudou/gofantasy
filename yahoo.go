@@ -2,21 +2,28 @@ package gofantasy
 
 import (
 	"context"
-	"crypto"
 	"fmt"
 	"github.com/gofantasy/model/yahoo"
-	"io"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type IYahooClient interface {
 	GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error)
 	GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
-	GetUserGames(ctx context.Context, gameKey string) (*yahoo.Game, error)
-	GetUserTeams(ctx context.Context, leagueID string) (*yahoo.User, error)
+	GetUserAttendGames(ctx context.Context, gameKey ...string) ([]yahoo.Game, error)
+	GetUserManagedTeams(ctx context.Context, gameKey ...string) ([]*yahoo.Team, error)
+	GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error)
 	OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
 	LoadAccessToken(path string) (IYahooClient, error)
+}
+
+var GameKeys = map[string]string{
+	"nfl": "nfl",
+	"nba": "nba",
+	"mlb": "mlb",
+	"nhl": "nhl",
 }
 
 type yahooClient struct {
@@ -27,10 +34,27 @@ type yahooClient struct {
 
 var _ IYahooClient = &yahooClient{}
 
+// OAuth2
+//
+//	@Description: returns an instance of yahooOAuth2
+//	@receiver y
+//	@param clientID
+//	@param clientSecret
+//	@param redirectURL
+//	@return IYahooOAuth2
 func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2 {
 	return y.yahooOAuth2.OAuth2(clientID, clientSecret, redirectURL)
 }
 
+// GetGameKeyBySeason
+//
+//	@Description:
+//	@receiver y
+//	@param ctx
+//	@param gameCode
+//	@param season
+//	@return *[]yahoo.Game
+//	@return error
 func (y *yahooClient) GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
 
 	endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
@@ -45,20 +69,96 @@ func (y *yahooClient) GetGameKeyBySeason(ctx context.Context, gameCode string, s
 	return &fc.Games, nil
 }
 
-func (*yahooClient) GetUserTeams(ctx context.Context, leagueID string) (*yahoo.User, error) {
-	//endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
-	//fc, err := y.get(ctx, endpoint, "")
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if len(fc.Games) == 0 {
-	//	return nil, fmt.Errorf("no games found for gameCode %s and season %s", gameCode, season)
-	//
-	//}
-	//return &fc.Games, nil
-	panic("unimplemented")
+// GetUserRoster
+//
+//	@Description:
+//	@receiver y
+//	@param ctx
+//	@param teamKey
+//	@return *yahoo.Roster
+//	@return error
+func (y *yahooClient) GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error) {
+
+	endpoint := fmt.Sprintf("%s/team/%s/roster/players", y.baseUrl, teamKey)
+	fc, err := y.get(ctx, endpoint, "")
+	if err != nil {
+		return nil, err
+	}
+	if &fc.Team == nil {
+		return nil, fmt.Errorf("no roster found for teamKey %s", teamKey)
+	}
+	return &fc.Team.Roster, nil
 }
 
+// GetUserAttendGames
+//
+//	@Description: get user attend games
+//	@receiver y
+//	@param ctx
+//	@param gameKeys
+//	@return []yahoo.Game
+//	@return error
+func (y *yahooClient) GetUserAttendGames(ctx context.Context, gameKeys ...string) ([]yahoo.Game, error) {
+	if !isValidGameCodes(gameKeys...) {
+		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
+	}
+	gcs := strings.Join(gameKeys, ",")
+
+	endpoint := fmt.Sprintf("%s/users;use_login=1/games;games_key=%s", y.baseUrl, gcs)
+	fc, err := y.get(ctx, endpoint, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(fc.Users) <= 0 {
+		return nil, fmt.Errorf("no games found for gameCodes %v", gameKeys)
+	}
+
+	return fc.Users[0].Games, nil
+}
+
+// GetUserManagedTeams
+//
+//	@Description:
+//	@receiver y
+//	@param ctx
+//	@param gameKeys
+//	@return []*yahoo.Team
+//	@return error
+func (y *yahooClient) GetUserManagedTeams(ctx context.Context, gameKeys ...string) ([]*yahoo.Team, error) {
+	if !isValidGameCodes(gameKeys...) {
+		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
+	}
+	gcs := strings.Join(gameKeys, ",")
+
+	endpoint := fmt.Sprintf("%s/users;use_login=1/games;game_keys=%s/teams", y.baseUrl, gcs)
+	fmt.Println(endpoint)
+	fc, err := y.get(ctx, endpoint, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if len(fc.Users) <= 0 {
+		return nil, fmt.Errorf("no teams found for gameCodes %v", gameKeys)
+	}
+	if len(fc.Users[0].Games) <= 0 {
+		return nil, fmt.Errorf("no games found for gameCodes %v", gameKeys)
+	}
+	games := fc.Users[0].Games
+	var teams []*yahoo.Team
+	for _, v := range games {
+		teams = append(teams, v.Teams...)
+	}
+
+	return teams, nil
+}
+
+// LoadAccessToken
+//
+//	@Description:
+//	@receiver y
+//	@param path
+//	@return IYahooClient
+//	@return error
 func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
 	if path == "" {
 		path = os.Getenv("HOME") + YahooTokenPath
@@ -74,15 +174,6 @@ func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
 	return y, nil
 }
 
-func (y *yahooClient) GetUserGames(ctx context.Context, gameKey string) (*yahoo.Game, error) {
-	endpoint := fmt.Sprintf("%s/users;use_login=1/games;games_key=%s", y.baseUrl, gameKey)
-	fc, err := y.get(ctx, endpoint, "")
-	if err != nil {
-		return nil, err
-	}
-	return &fc.Users[0].Games[0], nil
-}
-
 func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error) {
 	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
 	fc, err := y.get(ctx, endpoint, "league")
@@ -90,10 +181,6 @@ func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.Le
 		return nil, err
 	}
 	return &fc.League, nil
-}
-
-func (y *yahooClient) GetLeagueSettings(ctx context.Context, leagueID string) (yahoo.League, error) {
-	panic("implement me")
 }
 
 func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error) {
@@ -115,9 +202,11 @@ func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) 
 	return &fc, nil
 }
 
-func md5(str string) string {
-	w := crypto.MD5.New()
-	io.WriteString(w, str)
-	md5str := fmt.Sprintf("%x", w.Sum(nil))
-	return md5str
+func isValidGameCodes(gameKeys ...string) bool {
+	for _, v := range gameKeys {
+		if _, ok := GameKeys[v]; !ok {
+			return false
+		}
+	}
+	return true
 }
