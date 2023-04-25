@@ -10,15 +10,25 @@ func main() {
 	ctx := context.Background()
 	yc, err := gofantasy.
 		NewClient().
-		WithOptions(gofantasy.WithCache(128)).Yahoo().LoadAccessToken("")
+		Yahoo().LoadAccessToken("")
 
 	if err != nil {
 		panic(err)
 	}
 
-	game, err := yc.GetGameKeyBySeason(ctx, "nfl", "2020")
+	teams, err := yc.GetUserManagedTeams(ctx, "mlb")
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%+v", game)
+
+	for _, t := range teams {
+		roster, err := yc.GetUserRoster(ctx, t.TeamKey)
+		if err != nil {
+			fmt.Printf("error getting roster for team %s: %s\n", t.TeamKey, err)
+		}
+		for _, p := range roster.Players {
+			fmt.Printf("player: %s, position: %s, eligiblePositions: %s\n",
+				p.Name.Full, p.DisplayPosition, p.EligiblePositions)
+		}
+	}
 }

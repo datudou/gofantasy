@@ -12,6 +12,50 @@ type FantasyContent struct {
 	League  League   `xml:"league"`
 	Users   []User   `xml:"users>user"`
 	Games   []Game   `xml:"games>game"`
+	Team    Team     `xml:"team"`
+}
+
+type Team struct {
+	TeamKey               string     `xml:"team_key"`
+	TeamID                int        `xml:"team_id"`
+	Name                  string     `xml:"name"`
+	IsOwnedByCurrentLogin int        `xml:"is_owned_by_current_login"`
+	URL                   string     `xml:"url"`
+	TeamLogos             []TeamLogo `xml:"team_logos>team_logo"`
+	WaiverPriority        int        `xml:"waiver_priority"`
+	FAABBalance           int        `xml:"faab_balance"`
+	NumberOfMoves         int        `xml:"number_of_moves"`
+	NumberOfTrades        int        `xml:"number_of_trades"`
+	RosterAdds            RosterAdds `xml:"roster_adds"`
+	ClinchedPlayoffs      int        `xml:"clinched_playoffs"`
+	LeagueScoringType     string     `xml:"league_scoring_type"`
+	HasDraftGrade         int        `xml:"has_draft_grade"`
+	AuctionBudgetTotal    int        `xml:"auction_budget_total"`
+	AuctionBudgetSpent    int        `xml:"auction_budget_spent"`
+	Managers              []Manager  `xml:"managers>manager"`
+	Roster                Roster     `xml:"roster"`
+}
+
+type TeamLogo struct {
+	Size string `xml:"size"`
+	URL  string `xml:"url"`
+}
+
+type RosterAdds struct {
+	CoverageType  string `xml:"coverage_type"`
+	CoverageValue int    `xml:"coverage_value"`
+	Value         int    `xml:"value"`
+}
+
+type Manager struct {
+	ManagerID      int    `xml:"manager_id"`
+	Nickname       string `xml:"nickname"`
+	Guid           string `xml:"guid"`
+	IsCommissioner int    `xml:"is_commissioner"`
+	Email          string `xml:"email"`
+	ImageURL       string `xml:"image_url"`
+	FELOScore      int    `xml:"felo_score"`
+	FELOTier       string `xml:"felo_tier"`
 }
 
 type User struct {
@@ -20,13 +64,14 @@ type User struct {
 }
 
 type Game struct {
-	GameKey string `xml:"game_key"`
-	GameID  string `xml:"game_id"`
-	Name    string `xml:"name"`
-	Code    string `xml:"code"`
-	Type    string `xml:"type"`
-	URL     string `xml:"url"`
-	Season  string `xml:"season"`
+	GameKey string  `xml:"game_key"`
+	GameID  string  `xml:"game_id"`
+	Name    string  `xml:"name"`
+	Code    string  `xml:"code"`
+	Type    string  `xml:"type"`
+	URL     string  `xml:"url"`
+	Season  string  `xml:"season"`
+	Teams   []*Team `xml:"teams>team"`
 }
 
 type League struct {
@@ -84,4 +129,46 @@ type Stat struct {
 type Division struct {
 	DivisionID int    `xml:"division_id"`
 	Name       string `xml:"name"`
+}
+
+type Roster struct {
+	CoverageType string   `xml:"coverage_type"`
+	Date         string   `xml:"date"`
+	Players      []Player `xml:"players>player"`
+}
+
+type Name struct {
+	Full       string `xml:"full"`
+	First      string `xml:"first"`
+	Last       string `xml:"last"`
+	AsciiFirst string `xml:"ascii_first"`
+	AsciiLast  string `xml:"ascii_last"`
+}
+
+type EligiblePositions struct {
+	Position []string `xml:"position"`
+}
+
+type SelectedPosition struct {
+	CoverageType string `xml:"coverage_type"`
+	Date         string `xml:"date"`
+	Position     string `xml:"position"`
+}
+
+type Player struct {
+	PlayerKey             string            `xml:"player_key"`
+	PlayerID              int               `xml:"player_id"`
+	Name                  Name              `xml:"name"`
+	EditorialPlayerKey    string            `xml:"editorial_player_key"`
+	EditorialTeamKey      string            `xml:"editorial_team_key"`
+	EditorialTeamFullName string            `xml:"editorial_team_full_name"`
+	EditorialTeamAbbr     string            `xml:"editorial_team_abbr"`
+	UniformNumber         int               `xml:"uniform_number"`
+	DisplayPosition       string            `xml:"display_position"`
+	ImageURL              string            `xml:"image_url"`
+	IsUndroppable         int               `xml:"is_undroppable"`
+	PositionType          string            `xml:"position_type"`
+	EligiblePositions     EligiblePositions `xml:"eligible_positions"`
+	HasPlayerNotes        int               `xml:"has_player_notes"`
+	SelectedPosition      SelectedPosition  `xml:"selected_position"`
 }
