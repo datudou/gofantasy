@@ -10,7 +10,8 @@ Currently, GoFantasy is still on its early stages of development. The following 
 
 ## How to use 
 ### Yahoo Fantasy  
-#### Get You roster 
+#### Get your roster
+
 ```go
 package main
 
@@ -18,13 +19,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/gofantasy"
+	"golang.org/x/oauth2"
 )
 
 func main() {
 	ctx := context.Background()
+	//Yahoo api call need a access token, you can get it from https://developer.yahoo.com/oauth2/guide/flows_authcode/
+	//or you can refer the code in the ./example/auth/main.go to get the accessToken
+	accessToken := "Your access token"
 	yc, err := gofantasy.
 		NewClient().
-		Yahoo().LoadAccessToken("")
+		Yahoo().LoadAccessToken(accessToken)
 
 	if err != nil {
 		panic(err)
