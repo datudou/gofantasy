@@ -2,6 +2,8 @@ package gofantasy
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/gofantasy/model/yahoo"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 
 type IYahooClient interface {
 	GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error)
-	GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
+	GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
 	GetUserAttendGames(ctx context.Context, gameKey ...string) ([]yahoo.Game, error)
 	GetUserManagedTeams(ctx context.Context, gameKey ...string) ([]*yahoo.Team, error)
 	GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error)
@@ -46,7 +48,7 @@ func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooO
 	return y.yahooOAuth2.OAuth2(clientID, clientSecret, redirectURL)
 }
 
-// GetGameKeyBySeason
+// GetGameBySeason
 //
 //	@Description:
 //	@receiver y
@@ -55,7 +57,7 @@ func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooO
 //	@param season
 //	@return *[]yahoo.Game
 //	@return error
-func (y *yahooClient) GetGameKeyBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
+func (y *yahooClient) GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
 
 	endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
 	fc, err := y.get(ctx, endpoint, "")
@@ -99,7 +101,7 @@ func (y *yahooClient) GetUserRoster(ctx context.Context, teamKey string) (*yahoo
 //	@return []yahoo.Game
 //	@return error
 func (y *yahooClient) GetUserAttendGames(ctx context.Context, gameKeys ...string) ([]yahoo.Game, error) {
-	if !isValidGameCodes(gameKeys...) {
+	if !isValidGameKeys(gameKeys...) {
 		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
 	}
 	gcs := strings.Join(gameKeys, ",")
@@ -125,13 +127,12 @@ func (y *yahooClient) GetUserAttendGames(ctx context.Context, gameKeys ...string
 //	@return []*yahoo.Team
 //	@return error
 func (y *yahooClient) GetUserManagedTeams(ctx context.Context, gameKeys ...string) ([]*yahoo.Team, error) {
-	if !isValidGameCodes(gameKeys...) {
+	if !isValidGameKeys(gameKeys...) {
 		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
 	}
 	gcs := strings.Join(gameKeys, ",")
 
 	endpoint := fmt.Sprintf("%s/users;use_login=1/games;game_keys=%s/teams", y.baseUrl, gcs)
-	fmt.Println(endpoint)
 	fc, err := y.get(ctx, endpoint, "")
 	if err != nil {
 		return nil, err
@@ -174,6 +175,14 @@ func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
 	return y, nil
 }
 
+// GetLeague
+//
+//	@Description:
+//	@receiver y
+//	@param ctx
+//	@param leagueID
+//	@return *yahoo.League
+//	@return error
 func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error) {
 	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
 	fc, err := y.get(ctx, endpoint, "league")
@@ -186,9 +195,12 @@ func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.Le
 func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error) {
 	var fc yahoo.FantasyContent
 	if y.baseClient.cache != nil {
-		v, exist := y.baseClient.cache.Get(endpoint)
+		v, exist := y.baseClient.cache.Get(ctx, md5Hash(endpoint))
 		if exist {
+			fmt.Println("cache hit")
 			return v.(*yahoo.FantasyContent), nil
+		} else {
+			fmt.Printf("cache not exist for %s", endpoint)
 		}
 	}
 	_, err := y.baseClient.requestor.Get(ctx, endpoint, &fc, xmlDecorator, &xmlDecoder{})
@@ -197,16 +209,22 @@ func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) 
 	}
 
 	if y.baseClient.cache != nil {
-		y.baseClient.cache.Add(endpoint, &fc)
+		y.baseClient.cache.Set(ctx, md5Hash(endpoint), &fc)
 	}
 	return &fc, nil
 }
 
-func isValidGameCodes(gameKeys ...string) bool {
+func isValidGameKeys(gameKeys ...string) bool {
 	for _, v := range gameKeys {
 		if _, ok := GameKeys[v]; !ok {
 			return false
 		}
 	}
 	return true
+}
+
+func md5Hash(s string) string {
+	h := md5.New()
+	h.Write([]byte(s))
+	return hex.EncodeToString(h.Sum(nil))
 }

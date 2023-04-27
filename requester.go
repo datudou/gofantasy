@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -121,37 +120,21 @@ func (r *requestor) execute(
 	return resp, nil
 }
 
-type decoder interface {
-	decode(reader io.Reader, into any) error
+func (r *requestor) Get(ctx context.Context, path string, into any, rd requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "GET", nil, into, rd, d)
 }
 
-type xmlDecoder struct{}
-
-func (*xmlDecoder) decode(reader io.Reader, into any) error {
-	return xml.NewDecoder(reader).Decode(into)
+func (r *requestor) Post(ctx context.Context, path string, toPost any, into any, rd requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "POST", toPost, into, rd, d)
 }
 
-type jsonDecoder struct{}
-
-func (*jsonDecoder) jsonDecoder(reader io.Reader, into any) error {
-	return json.NewDecoder(reader).Decode(into)
+func (r *requestor) Patch(ctx context.Context, path string, toPatch any, into any, rd requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "PATCH", toPatch, into, rd, d)
 }
 
-func (r *requestor) Get(ctx context.Context, path string, into any, decorator requestDecorator, d decoder) (*http.Response, error) {
-	return r.execute(ctx, path, "GET", nil, into, decorator, d)
+func (r *requestor) Delete(ctx context.Context, path string, into any, rd requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "DELETE", nil, into, rd, d)
 }
-
-//func (r *requestor) Post(ctx context.Context, path string, toPost interface{}, into interface{}) (*http.Response, error) {
-//	return r.execute(ctx, path, "POST", toPost, into, jsonDecorator, decoder)
-//}
-//
-//func (r *requestor) Patch(ctx context.Context, path string, toPatch interface{}, into interface{}) (*http.Response, error) {
-//	return r.execute(ctx, path, "PATCH", toPatch, into, jsonDecorator, xml)
-//}
-//
-//func (r *requestor) Delete(ctx context.Context, path string, into interface{}) (*http.Response, error) {
-//	return r.execute(ctx, path, "DELETE", nil, into, jsonDecorator)
-//}
 
 func jsonDecorator(req *http.Request) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
