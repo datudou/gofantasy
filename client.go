@@ -1,7 +1,6 @@
 package gofantasy
 
 import (
-	lru "github.com/hashicorp/golang-lru/v2"
 	"net/http"
 	"time"
 )
@@ -15,7 +14,7 @@ type IClient interface {
 
 type client struct {
 	requestor *requestor
-	cache     *lru.Cache[interface{}, interface{}]
+	cache     ICache
 }
 
 var defaultHTTPClient = &http.Client{

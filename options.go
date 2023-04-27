@@ -1,7 +1,6 @@
 package gofantasy
 
 import (
-	lru "github.com/hashicorp/golang-lru/v2"
 	"net/http"
 )
 
@@ -26,8 +25,8 @@ func WithHTTPDebugging(request bool, response bool) ClientOption {
 
 // WithCache provide lru cache for caching responses.  This is useful for reducing the number of requests made to the server side.
 // The cache use golang-lru library, so the size is the number of items to store in the cache.
-func WithCache(size int) ClientOption {
+func WithCache(cache ICache) ClientOption {
 	return func(c *client) {
-		c.cache, _ = lru.New[interface{}, interface{}](size)
+		c.cache = cache
 	}
 }
