@@ -2,18 +2,20 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
-	"github.com/gofantasy"
 	"os"
+
+	"github.com/gofantasy"
 )
 
 func main() {
 	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
 	clientID := os.Getenv("YAHOO_CLIENT_ID")
+	ctx := context.Background()
 
 	ya := gofantasy.
-		NewClient().
-		Yahoo().OAuth2(clientID, "", redirectURL)
+		NewYahooClient().OAuth2(clientID, "", redirectURL)
 
 	authCodeUrl, err := ya.GetAuthCodeUrl()
 	if err != nil {
@@ -29,7 +31,7 @@ func main() {
 		return
 	}
 
-	err = ya.GetAccessToken(code)
+	err = ya.GetAccessToken(ctx, code)
 	if err != nil {
 		fmt.Println(err)
 	}

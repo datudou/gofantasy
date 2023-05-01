@@ -1,59 +1,23 @@
 package gofantasy
 
 import (
-	"net/http"
-	"time"
+	"context"
+
+	"github.com/gofantasy/model/yahoo"
 )
 
 type IClient interface {
 	// WithOptions allows providing additional client options such as WithHTTPDebugging. These are not commonly needed.
-	WithOptions(opts ...ClientOption) IClient
-	Yahoo() IYahooClient
-	//ESPN() IEspnClient
+	WithOptions(opts ...ClientOption) *yahooClient
+	Get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error)
+	SetCache(c ICache)
 }
 
 type client struct {
-	requestor *requestor
-	cache     ICache
+	Client
 }
 
-var defaultHTTPClient = &http.Client{
-	Timeout: time.Second * 10,
-	Transport: &http.Transport{
-		TLSHandshakeTimeout: 10 * time.Second,
-	},
+type Client struct {
+	Requestor *requestor
+	Cache     ICache
 }
-
-func NewClient(opts ...ClientOption) IClient {
-
-	r := &requestor{
-		httpClient: defaultHTTPClient,
-	}
-	c := &client{
-		requestor: r,
-	}
-	c.WithOptions(opts...)
-
-	return c
-}
-
-func (c *client) WithOptions(opts ...ClientOption) IClient {
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
-}
-
-func (c *client) Yahoo() IYahooClient {
-	return &yahooClient{
-		baseUrl:     YahooBaseURL,
-		baseClient:  c,
-		yahooOAuth2: &yahooOAuth2{},
-	}
-}
-
-//func (c *client) ESPN() IEspnClient {
-//	return &espnClient{
-//		baseUrl: YahooBaseURL,
-//	}
-//}

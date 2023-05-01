@@ -8,11 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/yahoo"
 	"io"
 	"os"
 	"time"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/yahoo"
 )
 
 type yahooOAuth2 struct {
@@ -25,7 +26,7 @@ type yahooOAuth2 struct {
 type IYahooOAuth2 interface {
 	OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
 	GetAuthCodeUrl() (string, error)
-	GetAccessToken(code string) error
+	GetAccessToken(ctx context.Context, code string) error
 	SaveToken(path string) error
 	LoadAccessToken(path string) (*oauth2.Token, error)
 }
@@ -73,8 +74,7 @@ func (y *yahooOAuth2) SaveToken(path string) error {
 	return saveToken(&y.token, path)
 }
 
-func (y *yahooOAuth2) GetAccessToken(code string) error {
-	ctx := context.Background()
+func (y *yahooOAuth2) GetAccessToken(ctx context.Context, code string) error {
 	o := oauth2.SetAuthURLParam("code_verifier", y.codeVerifier)
 	token, err := y.getAccessToken(ctx, code, o)
 	if err != nil {

@@ -5,36 +5,59 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"github.com/gofantasy/model/yahoo"
 	"net/http"
 	"os"
-	"strings"
+	"time"
+
+	"github.com/gofantasy/model/yahoo"
 )
 
 type IYahooClient interface {
-	GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error)
-	GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
-	GetUserAttendGames(ctx context.Context, gameKey ...string) ([]yahoo.Game, error)
-	GetUserManagedTeams(ctx context.Context, gameKey ...string) ([]*yahoo.Team, error)
-	GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error)
-	OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
-	LoadAccessToken(path string) (IYahooClient, error)
-}
-
-var GameKeys = map[string]string{
-	"nfl": "nfl",
-	"nba": "nba",
-	"mlb": "mlb",
-	"nhl": "nhl",
+	// GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error)
+	// GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error)
+	// GetUserAttendGames(ctx context.Context, gameKey ...string) ([]yahoo.Game, error)
+	// GetUserManagedTeams(ctx context.Context, gameKey ...string) ([]*yahoo.Team, error)
+	// GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error)
+	// OAuth2(clientID, clientSecret, redirectURL string) IYahooOAuth2
+	// LoadAccessToken(path string) (IYahooClient, error)
 }
 
 type yahooClient struct {
 	baseUrl     string
-	baseClient  *client
 	yahooOAuth2 *yahooOAuth2
+	Client
 }
 
-var _ IYahooClient = &yahooClient{}
+var defaultHTTPClient = &http.Client{
+	Timeout: time.Second * 10,
+	Transport: &http.Transport{
+		TLSHandshakeTimeout: 10 * time.Second,
+	},
+}
+
+func NewYahooClient(opts ...ClientOption) *yahooClient {
+
+	r := &requestor{
+		httpClient: defaultHTTPClient,
+	}
+	c := &yahooClient{
+		yahooOAuth2: &yahooOAuth2{},
+		baseUrl:     YahooBaseURL,
+	}
+	c.Requestor = r
+	return c
+}
+
+func (c *yahooClient) WithOptions(opts ...ClientOption) *yahooClient {
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+func (y *yahooClient) SetCache(c ICache) {
+	y.Cache = c
+}
 
 // OAuth2
 //
@@ -57,19 +80,19 @@ func (y *yahooClient) OAuth2(clientID, clientSecret, redirectURL string) IYahooO
 //	@param season
 //	@return *[]yahoo.Game
 //	@return error
-func (y *yahooClient) GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
+// func (y *yahooClient) GetGameBySeason(ctx context.Context, gameCode string, season string) (*[]yahoo.Game, error) {
 
-	endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
-	fc, err := y.get(ctx, endpoint, "")
-	if err != nil {
-		return nil, err
-	}
-	if len(fc.Games) == 0 {
-		return nil, fmt.Errorf("no games found for gameCode %s and season %s", gameCode, season)
+// 	endpoint := fmt.Sprintf("%s/games;game_codes=%s;seasons=%s", y.baseUrl, gameCode, season)
+// 	fc, err := y.get(ctx, endpoint, "")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	if len(fc.Games) == 0 {
+// 		return nil, fmt.Errorf("no games found for gameCode %s and season %s", gameCode, season)
 
-	}
-	return &fc.Games, nil
-}
+// 	}
+// 	return &fc.Games, nil
+// }
 
 // GetUserRoster
 //
@@ -79,18 +102,18 @@ func (y *yahooClient) GetGameBySeason(ctx context.Context, gameCode string, seas
 //	@param teamKey
 //	@return *yahoo.Roster
 //	@return error
-func (y *yahooClient) GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error) {
+// func (y *yahooClient) GetUserRoster(ctx context.Context, teamKey string) (*yahoo.Roster, error) {
 
-	endpoint := fmt.Sprintf("%s/team/%s/roster/players", y.baseUrl, teamKey)
-	fc, err := y.get(ctx, endpoint, "")
-	if err != nil {
-		return nil, err
-	}
-	if &fc.Team == nil {
-		return nil, fmt.Errorf("no roster found for teamKey %s", teamKey)
-	}
-	return &fc.Team.Roster, nil
-}
+// 	endpoint := fmt.Sprintf("%s/team/%s/roster/players", y.baseUrl, teamKey)
+// 	fc, err := y.get(ctx, endpoint, "")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	if &fc.Team == nil {
+// 		return nil, fmt.Errorf("no roster found for teamKey %s", teamKey)
+// 	}
+// 	return &fc.Team.Roster, nil
+// }
 
 // GetUserAttendGames
 //
@@ -101,13 +124,6 @@ func (y *yahooClient) GetUserRoster(ctx context.Context, teamKey string) (*yahoo
 //	@return []yahoo.Game
 //	@return error
 func (y *yahooClient) GetUserAttendGames(ctx context.Context, gameKeys ...string) ([]yahoo.Game, error) {
-	if !isValidGameKeys(gameKeys...) {
-		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
-	}
-	gcs := strings.Join(gameKeys, ",")
-
-	endpoint := fmt.Sprintf("%s/users;use_login=1/games;games_key=%s", y.baseUrl, gcs)
-	fc, err := y.get(ctx, endpoint, "")
 	if err != nil {
 		return nil, err
 	}
@@ -126,41 +142,41 @@ func (y *yahooClient) GetUserAttendGames(ctx context.Context, gameKeys ...string
 //	@param gameKeys
 //	@return []*yahoo.Team
 //	@return error
-func (y *yahooClient) GetUserManagedTeams(ctx context.Context, gameKeys ...string) ([]*yahoo.Team, error) {
-	if !isValidGameKeys(gameKeys...) {
-		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
-	}
-	gcs := strings.Join(gameKeys, ",")
+// func (y *yahooClient) GetUserManagedTeams(ctx context.Context, gameKeys ...string) ([]*yahoo.Team, error) {
+// 	if !isValidGameKeys(gameKeys...) {
+// 		return nil, fmt.Errorf("invalid gameCodes %v", gameKeys)
+// 	}
+// 	gcs := strings.Join(gameKeys, ",")
 
-	endpoint := fmt.Sprintf("%s/users;use_login=1/games;game_keys=%s/teams", y.baseUrl, gcs)
-	fc, err := y.get(ctx, endpoint, "")
-	if err != nil {
-		return nil, err
-	}
+// 	endpoint := fmt.Sprintf("%s/users;use_login=1/games;game_keys=%s/teams", y.baseUrl, gcs)
+// 	fc, err := y.get(ctx, endpoint, "")
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	if len(fc.Users) <= 0 {
-		return nil, fmt.Errorf("no teams found for gameCodes %v", gameKeys)
-	}
-	if len(fc.Users[0].Games) <= 0 {
-		return nil, fmt.Errorf("no games found for gameCodes %v", gameKeys)
-	}
-	games := fc.Users[0].Games
-	var teams []*yahoo.Team
-	for _, v := range games {
-		teams = append(teams, v.Teams...)
-	}
+// 	if len(fc.Users) <= 0 {
+// 		return nil, fmt.Errorf("no teams found for gameCodes %v", gameKeys)
+// 	}
+// 	if len(fc.Users[0].Games) <= 0 {
+// 		return nil, fmt.Errorf("no games found for gameCodes %v", gameKeys)
+// 	}
+// 	games := fc.Users[0].Games
+// 	var teams []*yahoo.Team
+// 	for _, v := range games {
+// 		teams = append(teams, v.Teams...)
+// 	}
 
-	return teams, nil
-}
+// 	return teams, nil
+// }
 
 // LoadAccessToken
-//
-//	@Description:
-//	@receiver y
-//	@param path
-//	@return IYahooClient
-//	@return error
-func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
+
+// @Description:
+// @receiver y
+// @param path
+// @return IYahooClient
+// @return error
+func (y *yahooClient) LoadAccessToken(path string) (*yahooClient, error) {
 	if path == "" {
 		path = os.Getenv("HOME") + YahooTokenPath
 	}
@@ -168,7 +184,7 @@ func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	y.baseClient.requestor.AuthorizationDecorator = func(req *http.Request) *http.Request {
+	y.Requestor.AuthorizationDecorator = func(req *http.Request) *http.Request {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 		return req
 	}
@@ -177,25 +193,32 @@ func (y *yahooClient) LoadAccessToken(path string) (IYahooClient, error) {
 
 // GetLeague
 //
-//	@Description:
+//	@Description:GetLeague retrieves information about a specific Yahoo fantasy league with the given leagueID.
 //	@receiver y
 //	@param ctx
 //	@param leagueID
 //	@return *yahoo.League
 //	@return error
-func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error) {
-	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
-	fc, err := y.get(ctx, endpoint, "league")
-	if err != nil {
-		return nil, err
-	}
-	return &fc.League, nil
+
+// func (y *yahooClient) GetLeague(ctx context.Context, leagueID string) (*yahoo.League, error) {
+// 	endpoint := fmt.Sprintf("%s/league/%s", y.baseUrl, leagueID)
+// 	fc, err := y.get(ctx, endpoint, "league")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &fc.League, nil
+// }
+
+func md5Hash(s string) string {
+	h := md5.New()
+	h.Write([]byte(s))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error) {
+func (y *yahooClient) Get(ctx context.Context, endpoint string, objType string) (*yahoo.FantasyContent, error) {
 	var fc yahoo.FantasyContent
-	if y.baseClient.cache != nil {
-		v, exist := y.baseClient.cache.Get(ctx, md5Hash(endpoint))
+	if y.Cache != nil {
+		v, exist := y.Cache.Get(ctx, md5Hash(endpoint))
 		if exist {
 			fmt.Println("cache hit")
 			return v.(*yahoo.FantasyContent), nil
@@ -203,28 +226,13 @@ func (y *yahooClient) get(ctx context.Context, endpoint string, objType string) 
 			fmt.Printf("cache not exist for %s", endpoint)
 		}
 	}
-	_, err := y.baseClient.requestor.Get(ctx, endpoint, &fc, xmlDecorator, &xmlDecoder{})
+	_, err := y.Requestor.Get(ctx, endpoint, &fc, xmlDecorator, &xmlDecoder{})
 	if err != nil {
 		return nil, err
 	}
 
-	if y.baseClient.cache != nil {
-		y.baseClient.cache.Set(ctx, md5Hash(endpoint), &fc)
+	if y.Cache != nil {
+		y.Cache.Set(ctx, md5Hash(endpoint), &fc)
 	}
 	return &fc, nil
-}
-
-func isValidGameKeys(gameKeys ...string) bool {
-	for _, v := range gameKeys {
-		if _, ok := GameKeys[v]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func md5Hash(s string) string {
-	h := md5.New()
-	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))
 }
