@@ -62,6 +62,60 @@ them should gate every write behind explicit user approval to stay within
 Yahoo's API terms, which prohibit unattended automation acting on a user's
 behalf.
 
+### ESPN Fantasy
+
+ESPN has no official public API. This client uses the undocumented v3 read API
+(`lm-api-reads.fantasy.espn.com`). Private leagues require browser session
+cookies `SWID` and `espn_s2` (DevTools → Application → Cookies on espn.com).
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/gofantasy"
+)
+
+func main() {
+	ctx := context.Background()
+	ec := gofantasy.NewClient().ESPN().WithCookies(
+		"{YOUR-SWID}",
+		"YOUR_ESPN_S2_COOKIE",
+	)
+
+	leagueID := 899513
+	season := 2024
+
+	roster, err := ec.GetRoster(ctx, "nfl", season, leagueID, 1)
+	if err != nil {
+		panic(err)
+	}
+	for _, e := range roster.Entries {
+		fmt.Println(e.PlayerPoolEntry.Player.FullName, e.LineupSlotID)
+	}
+
+	teams, err := ec.GetStandings(ctx, "nba", season, leagueID)
+	if err != nil {
+		panic(err)
+	}
+	for _, t := range teams {
+		fmt.Printf("%s %s (%d-%d)\n", t.Location, t.Nickname, t.Record.Overall.Wins, t.Record.Overall.Losses)
+	}
+}
+```
+
+Sport aliases: `nfl`→`ffl`, `nba`→`fba`, `mlb`→`flb`, `nhl`→`nhl`. Seasons
+before 2018 use the `leagueHistory` endpoint automatically.
+
+ESPN does not expose a "list all my leagues" API. Use `DiscoverManagedTeams`
+with league IDs from your fantasy.espn.com URL, or call `GetLeague` /
+`GetTeams` when you already know the league ID.
+
+Write operations (lineup changes, add/drop) are planned; reads are implemented
+in Phase 1.
+
 
 ## Contribution
 

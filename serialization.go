@@ -34,6 +34,6 @@ func (*xmlDecoder) decode(reader io.Reader, into any) error {
 
 type jsonDecoder struct{}
 
-func (*jsonDecoder) jsonDecoder(reader io.Reader, into any) error {
+func (*jsonDecoder) decode(reader io.Reader, into any) error {
 	return json.NewDecoder(reader).Decode(into)
 }

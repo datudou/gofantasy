@@ -1,39 +1,56 @@
 package espn
 
 type League struct {
-	GameId          int          `json:"gameId"`
-	ID              int          `json:"id"`
-	Members         []Memeber    `json:"members"`
-	ScoringPeriodId int          `json:"scoringPeriodId"`
-	SeasonId        int          `json:"seasonId"`
-	SegmentId       int          `json:"segmentId"`
-	Settings        Settings     `json:"settings"`
-	Status          LeagueStatus `json:"status"`
-	Teams           []TeamInfo   `json:"teams"`
+	GameId          int             `json:"gameId"`
+	ID              int             `json:"id"`
+	Members         []Member        `json:"members"`
+	ScoringPeriodId int             `json:"scoringPeriodId"`
+	SeasonId        int             `json:"seasonId"`
+	SegmentId       int             `json:"segmentId"`
+	Settings        Settings        `json:"settings"`
+	Status          LeagueStatus    `json:"status"`
+	Teams           []Team          `json:"teams"`
+	Schedule        []ScheduleEntry `json:"schedule"`
+	DraftDetail     DraftDetail     `json:"draftDetail"`
+	Transactions    []Transaction   `json:"transactions"`
+	Players         []PlayerPoolEntry `json:"players,omitempty"`
 }
 
-type Memeber struct {
+// Member is a league member (owner/manager).
+type Member struct {
 	ID              string `json:"id"`
 	DisplayName     string `json:"displayName"`
 	IsLeagueManager bool   `json:"isLeagueManager"`
 }
 
+// Memeber is a deprecated misspelling kept as an alias.
+type Memeber = Member
+
 type Settings struct {
-	Name string `json:"name"`
+	Name           string         `json:"name"`
+	Size           int            `json:"size"`
+	RosterSettings RosterSettings `json:"rosterSettings"`
+	ScoringSettings ScoringSettings `json:"scoringSettings"`
+}
+
+type RosterSettings struct {
+	LineupSlotCounts map[string]int `json:"lineupSlotCounts"`
+}
+
+type ScoringSettings struct {
+	ScoringItems []ScoringItem `json:"scoringItems"`
+}
+
+type ScoringItem struct {
+	StatID int     `json:"statId"`
+	Points float64 `json:"points"`
 }
 
 type LeagueStatus struct {
 	CurrentMatchupPeriod int  `json:"currentMatchupPeriod"`
 	IsActive             bool `json:"isActive"`
 	LatestScoringPeriod  int  `json:"latestScoringPeriod"`
-}
-
-type TeamInfo struct {
-	Abbrev   string   `json:"abbrev"`
-	Id       int      `json:"id"`
-	Location string   `json:"location"`
-	Nickname string   `json:"nickname"`
-	Owners   []string `json:"owners"`
+	IsComplete           bool `json:"isComplete"`
 }
 
 type Link struct {

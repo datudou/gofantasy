@@ -1,0 +1,82 @@
+{
+  "id": 899513,
+  "seasonId": 2024,
+  "gameId": 1,
+  "segmentId": 0,
+  "scoringPeriodId": 5,
+  "settings": {
+    "name": "Test League",
+    "size": 10
+  },
+  "status": {
+    "currentMatchupPeriod": 5,
+    "isActive": true,
+    "latestScoringPeriod": 5,
+    "isComplete": false
+  },
+  "teams": [
+    {
+      "id": 1,
+      "abbrev": "ABC",
+      "location": "Alpha",
+      "nickname": "Wolves",
+      "owners": ["{11111111-1111-1111-1111-111111111111}"],
+      "record": {
+        "overall": {
+          "wins": 3,
+          "losses": 2,
+          "ties": 0,
+          "pointsFor": 512.4,
+          "pointsAgainst": 480.1
+        }
+      },
+      "roster": {
+        "entries": [
+          {
+            "playerId": 1234,
+            "lineupSlotId": 0,
+            "status": "ACTIVE",
+            "playerPoolEntry": {
+              "id": 1234,
+              "player": {
+                "id": 1234,
+                "fullName": "Patrick Mahomes",
+                "defaultPositionId": 1,
+                "proTeamId": 12,
+                "active": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "abbrev": "XYZ",
+      "location": "Beta",
+      "nickname": "Hawks",
+      "owners": ["{22222222-2222-2222-2222-222222222222}"]
+    }
+  ],
+  "schedule": [
+    {
+      "id": 1,
+      "matchupPeriodId": 5,
+      "home": { "teamId": 1, "totalPoints": 112.5 },
+      "away": { "teamId": 2, "totalPoints": 98.2 },
+      "winner": "HOME"
+    }
+  ],
+  "players": [
+    {
+      "id": 5678,
+      "player": {
+        "id": 5678,
+        "fullName": "Free Agent Player",
+        "defaultPositionId": 2,
+        "active": true
+      },
+      "status": "FREEAGENT"
+    }
+  ]
+}
