@@ -1,1 +1,7 @@
 .idea/
+/fantasy-agent
+/fantasy-mcp
+/fantasy-web
+*.db
+*.db-wal
+*.db-shm

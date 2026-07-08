@@ -28,6 +28,16 @@ type IYahooOAuth2 interface {
 	GetAccessToken(code string) error
 	SaveToken(path string) error
 	LoadAccessToken(path string) (*oauth2.Token, error)
+	// Token returns the currently held token (may be the zero value if none
+	// has been loaded/exchanged yet).
+	Token() *oauth2.Token
+	// SetToken installs an already-obtained token (e.g. loaded from a
+	// database rather than a file) for subsequent use/refresh.
+	SetToken(t *oauth2.Token)
+	// RefreshIfNeeded refreshes the held token when it is expired, using
+	// YAHOO_CLIENT_ID / YAHOO_REDIRECT_URL from the environment, and returns
+	// the (possibly unchanged) current token.
+	RefreshIfNeeded() (*oauth2.Token, error)
 }
 
 var _ IYahooOAuth2 = &yahooOAuth2{}
@@ -35,11 +45,13 @@ var _ IYahooOAuth2 = &yahooOAuth2{}
 func (y *yahooOAuth2) RefreshToken() error {
 	redirectURL := os.Getenv("YAHOO_REDIRECT_URL")
 	clientID := os.Getenv("YAHOO_CLIENT_ID")
+	clientSecret := os.Getenv("YAHOO_CLIENT_SECRET")
 	oc := &oauth2.Config{
-		ClientID:    clientID,
-		RedirectURL: redirectURL,
-		Scopes:      []string{"openid"},
-		Endpoint:    yahoo.Endpoint,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURL:  redirectURL,
+		Scopes:       []string{"openid"},
+		Endpoint:     yahoo.Endpoint,
 	}
 	token := &oauth2.Token{
 		RefreshToken: y.token.RefreshToken,
@@ -59,11 +71,35 @@ func (y *yahooOAuth2) RefreshToken() error {
 }
 
 func (y *yahooOAuth2) LoadAccessToken(path string) (*oauth2.Token, error) {
-	err := readToken(path, &y.token)
-	if y.token.Expiry.UTC().Before(time.Now().UTC()) {
-		err = y.RefreshToken()
+	if err := readToken(path, &y.token); err != nil {
+		return nil, err
 	}
-	if err != nil {
+	if y.token.Expiry.UTC().Before(time.Now().UTC()) {
+		if err := y.RefreshToken(); err != nil {
+			return nil, err
+		}
+	}
+	return &y.token, nil
+}
+
+// Token returns the currently held token.
+func (y *yahooOAuth2) Token() *oauth2.Token {
+	return &y.token
+}
+
+// SetToken installs an already-obtained token for subsequent use/refresh.
+func (y *yahooOAuth2) SetToken(t *oauth2.Token) {
+	if t != nil {
+		y.token = *t
+	}
+}
+
+// RefreshIfNeeded refreshes the held token when it is expired.
+func (y *yahooOAuth2) RefreshIfNeeded() (*oauth2.Token, error) {
+	if y.token.Expiry.IsZero() || y.token.Expiry.UTC().After(time.Now().UTC()) {
+		return &y.token, nil
+	}
+	if err := y.RefreshToken(); err != nil {
 		return nil, err
 	}
 	return &y.token, nil
@@ -151,16 +187,15 @@ func saveToken(token *oauth2.Token, path string) error {
 func readToken(path string, t *oauth2.Token) error {
 	f, err := os.Open(path)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("opening token file %s: %w", path, err)
 	}
 	defer f.Close()
 	byteValue, err := io.ReadAll(f)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("reading token file %s: %w", path, err)
 	}
-	err = json.Unmarshal([]byte(byteValue), t)
-	if err != nil {
-		panic(err)
+	if err := json.Unmarshal(byteValue, t); err != nil {
+		return fmt.Errorf("parsing token file %s: %w", path, err)
 	}
 	return nil
 }

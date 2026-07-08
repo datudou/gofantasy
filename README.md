@@ -52,9 +52,26 @@ func main() {
 }
 ```
 
+## Write operations
+
+Besides reads, the Yahoo client also supports state-mutating operations:
+`SetRoster` / `SetRosterForWeek` (lineups), `AddPlayer` / `DropPlayer` /
+`AddDropPlayer` (waivers and free agents), `ProposeTrade` / `RespondToTrade` /
+`CancelTransaction` (trades). These mutate league state — applications built on
+them should gate every write behind explicit user approval to stay within
+Yahoo's API terms, which prohibit unattended automation acting on a user's
+behalf.
+
+
 ## Contribution
 
 Contributions are welcome! If you find a bug or want to suggest a new feature, feel free to open an issue or create a pull request.
+
+## Attribution
+
+Fantasy data is provided by Yahoo Fantasy. Applications built on the Yahoo
+Fantasy Sports API must display this attribution and comply with Yahoo's API
+Access and Use Agreement.
 
 ## License
 

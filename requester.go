@@ -113,7 +113,7 @@ func (r *requestor) execute(
 	} else {
 		if into != nil {
 			if err := d.decode(toDecode, into); err != nil {
-				return resp, fmt.Errorf("failed parsing the response from %s:%s", method, path)
+				return resp, fmt.Errorf("failed parsing the response from %s:%s: %w", method, path, err)
 			}
 		}
 	}
@@ -126,6 +126,10 @@ func (r *requestor) Get(ctx context.Context, path string, into any, rd requestDe
 
 func (r *requestor) Post(ctx context.Context, path string, toPost any, into any, rd requestDecorator, d decoder) (*http.Response, error) {
 	return r.execute(ctx, path, "POST", toPost, into, rd, d)
+}
+
+func (r *requestor) Put(ctx context.Context, path string, toPut any, into any, rd requestDecorator, d decoder) (*http.Response, error) {
+	return r.execute(ctx, path, "PUT", toPut, into, rd, d)
 }
 
 func (r *requestor) Patch(ctx context.Context, path string, toPatch any, into any, rd requestDecorator, d decoder) (*http.Response, error) {
