@@ -7,6 +7,9 @@ const (
 
 	// EspnBaseURL is the read API base for ESPN Fantasy v3 (2018+ seasons).
 	EspnBaseURL = "https://lm-api-reads.fantasy.espn.com/apis/v3/games"
+
+	// SleeperBaseURL is the public read-only Sleeper Fantasy API.
+	SleeperBaseURL = "https://api.sleeper.app/v1"
 )
 
 // EspnGameCodes maps common sport aliases to ESPN game path segments.

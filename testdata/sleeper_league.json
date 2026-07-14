@@ -1,0 +1,8 @@
+{
+  "league_id": "123456789",
+  "name": "Test League",
+  "season": "2024",
+  "sport": "nfl",
+  "status": "in_season",
+  "settings": { "num_teams": 10 }
+}

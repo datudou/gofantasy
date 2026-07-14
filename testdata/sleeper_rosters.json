@@ -1,0 +1,11 @@
+[
+  {
+    "roster_id": 1,
+    "owner_id": "user123",
+    "league_id": "123456789",
+    "players": ["p1", "p2"],
+    "starters": ["p1"],
+    "reserve": [],
+    "settings": { "wins": 5, "losses": 2, "ties": 0, "fpts": 512.4, "fpts_against": 480.1 }
+  }
+]

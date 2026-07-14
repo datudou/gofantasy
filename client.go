@@ -10,6 +10,7 @@ type IClient interface {
 	WithOptions(opts ...ClientOption) IClient
 	Yahoo() IYahooClient
 	ESPN() IEspnClient
+	Sleeper() ISleeperClient
 }
 
 type client struct {
@@ -56,5 +57,13 @@ func (c *client) ESPN() IEspnClient {
 	return &espnClient{
 		baseURL:    EspnBaseURL,
 		baseClient: c,
+	}
+}
+
+func (c *client) Sleeper() ISleeperClient {
+	return &sleeperClient{
+		baseURL:      SleeperBaseURL,
+		baseClient:   c,
+		playersCache: newSleeperPlayersCache(""),
 	}
 }
