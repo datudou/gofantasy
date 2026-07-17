@@ -25,6 +25,7 @@ type ISleeperClient interface {
 	GetTransactions(ctx context.Context, leagueID string, week int) ([]sleeper.Transaction, error)
 	GetState(ctx context.Context, sport string) (*sleeper.State, error)
 	GetPlayer(ctx context.Context, sport, playerID string) (*sleeper.Player, error)
+	AllPlayers(ctx context.Context, sport string) (map[string]*sleeper.Player, error)
 	GetTrendingPlayers(ctx context.Context, sport, trendType string, lookbackHours, limit int) ([]sleeper.Player, error)
 	GetProjections(ctx context.Context, sport string, season, week int) (map[string]sleeper.PlayerProjection, error)
 	ResolveRoster(ctx context.Context, sport, leagueID string, rosterID int) (*sleeper.ResolvedRoster, error)
@@ -290,6 +291,29 @@ func (s *sleeperClient) loadPlayersRaw(ctx context.Context, sport string) (map[s
 	s.playersRaw[sport] = players
 	s.playersMu.Unlock()
 	return players, nil
+}
+
+// AllPlayers decodes the full player pool for a sport, keyed by Sleeper
+// player ID. The pool is large (thousands of entries, 24h disk cache
+// underneath) — callers should derive and cache whatever index they need
+// rather than calling this per lookup.
+func (s *sleeperClient) AllPlayers(ctx context.Context, sport string) (map[string]*sleeper.Player, error) {
+	raw, err := s.loadPlayersRaw(ctx, sport)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*sleeper.Player, len(raw))
+	for id, b := range raw {
+		var p sleeper.Player
+		if err := json.Unmarshal(b, &p); err != nil {
+			continue // tolerate malformed pool entries
+		}
+		if p.PlayerID == "" {
+			p.PlayerID = id
+		}
+		out[id] = &p
+	}
+	return out, nil
 }
 
 func (s *sleeperClient) GetPlayer(ctx context.Context, sport, playerID string) (*sleeper.Player, error) {

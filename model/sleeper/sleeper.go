@@ -16,6 +16,10 @@ type League struct {
 	Sport    string         `json:"sport"`
 	Status   string         `json:"status"`
 	Settings LeagueSettings `json:"settings"`
+	// ScoringSettings maps Sleeper stat names to point weights (e.g. NBA
+	// "pts": 1, "reb": 1.2). Keys line up with PlayerProjection stat names,
+	// so a projection folds into league points by a weighted sum.
+	ScoringSettings map[string]float64 `json:"scoring_settings"`
 }
 
 type LeagueSettings struct {
